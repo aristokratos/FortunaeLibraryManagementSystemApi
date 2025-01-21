@@ -21,7 +21,7 @@ namespace FortunaeLibraryManagementSystem.Controllers
 
         [HttpPost]
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult> AddBook([FromBody] CreateBookDTO createBookDto)
+        public async Task<IActionResult> AddBook([FromForm] CreateBookDTO createBookDto)
         {
             var book = await _bookService.AddBookAsync(createBookDto);
             return CreatedAtAction(nameof(GetAllBooksForAdmin), new { id = book.Id }, book);
@@ -29,7 +29,7 @@ namespace FortunaeLibraryManagementSystem.Controllers
 
         [HttpPut("{id}")]
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult> UpdateBook(Guid id, [FromBody] UpdateBookDTO updateBookDto)
+        public async Task<IActionResult> UpdateBook(Guid id, [FromForm] UpdateBookDTO updateBookDto)
         {
             var book = await _bookService.UpdateBookAsync(id, updateBookDto);
             return Ok(book);

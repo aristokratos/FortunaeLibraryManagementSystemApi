@@ -10,5 +10,6 @@ namespace FortunaeLibraryManagementSystem.Domain.Entities
         public string? Genre { get; set; }
         public string? ISBN { get; set; }
         public bool IsAvailable { get; set; }
+        public string? BookImage { get; set; }
     }
 }

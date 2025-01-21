@@ -34,7 +34,7 @@ public class BorrowingRepositoryTests
             UserId = userId,
             BookId = bookId,
             BorrowedAt = DateTime.UtcNow,
-            ReturnedAt = null // Active borrowing
+            ReturnedAt = null 
         };
 
         _dbContext.Borrowings.Add(borrowing);
