@@ -20,12 +20,12 @@ namespace FortunaeLibraryManagementSystem.Controllers
 
         [HttpPost]
         [Authorize(Roles = "Member")]
-        public async Task<IActionResult> BorrowBook([FromBody] BorrowBookDTO borrowBookDto)
+        public async Task<IActionResult> BorrowBook([FromQuery] Guid userId, [FromBody] BorrowBookDTO borrowBookDto)
         {
-            var userId = Guid.Parse(User.Identity.Name); // Extract user ID from JWT claims
             var borrowing = await _borrowingService.BorrowBookAsync(userId, borrowBookDto);
             return Ok(borrowing);
         }
+
 
         [HttpPut("{id}/return")]
         [Authorize(Roles = "Member")]

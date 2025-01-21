@@ -84,7 +84,8 @@ namespace FortunaeLibraryManagementSystem.Service.Services
             var claims = new[]
             {
                 new Claim(ClaimTypes.Name, username),
-                new Claim(ClaimTypes.Role, role)
+                new Claim(ClaimTypes.Role, role),
+
             };
 
             // Ensure the token is properly formatted with "Bearer" prefix
