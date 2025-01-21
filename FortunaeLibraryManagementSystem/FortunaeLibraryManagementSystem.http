@@ -1,0 +1,6 @@
+@FortunaeLibraryManagementSystem_HostAddress = http://localhost:5087
+
+GET {{FortunaeLibraryManagementSystem_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
