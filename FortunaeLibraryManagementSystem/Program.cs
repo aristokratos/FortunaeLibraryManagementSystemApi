@@ -8,32 +8,20 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Microsoft.OpenApi.Models;
+using Microsoft.Extensions.Caching.StackExchangeRedis;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Logging for production
-builder.Logging.ClearProviders();
-builder.Logging.AddConsole();
+// Add services to the container.
+Microsoft.IdentityModel.Logging.IdentityModelEventSource.ShowPII = true;
 
-// Add Redis cache
 builder.Services.AddStackExchangeRedisCache(options =>
 {
-    var redisConnection = Environment.GetEnvironmentVariable("REDIS_CONNECTION")
-                          ?? throw new Exception("Redis connection string not found!");
-    options.Configuration = redisConnection;
-    options.InstanceName = "LibraryManagementSystem_";
+    options.Configuration = builder.Configuration.GetConnectionString("RedisConnection");
+    options.InstanceName = "LibraryManagementSystem_"; // Prefix for cached keys
 });
-
-// Add DbContext with retry logic
-var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING")
-                       ?? builder.Configuration.GetConnectionString("DefaultConnection");
-builder.Services.AddDbContext<LibraryDbContext>(options =>
-    options.UseSqlServer(connectionString, sqlOptions =>
-        sqlOptions.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), null)
-    )
-);
-
-// Add services
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+builder.Services.AddDbContext<LibraryDbContext>(options => options.UseSqlServer(connectionString));
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IBookRepository, BookRepository>();
@@ -44,13 +32,22 @@ builder.Services.AddScoped<IBorrowingRepository, BorrowingRepository>();
 builder.Services.AddControllers();
 
 // Configure JWT Authentication
-var jwtKey = Environment.GetEnvironmentVariable("JWT_SECRET_KEY")
-             ?? throw new Exception("JWT Secret Key not found!");
+var jwtKey = builder.Configuration["JwtSettings:SecretKey"];
+var jwtIssuer = builder.Configuration["JwtSettings:Issuer"];
+var jwtAudience = builder.Configuration["JwtSettings:Audience"];
+
+var jwtSettings = builder.Configuration.GetSection("JwtSettings");
+var secretKey = jwtSettings["SecretKey"];
+
+if (string.IsNullOrEmpty(secretKey))
+{
+    throw new Exception("JWT SecretKey is missing!");
+}
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        options.RequireHttpsMetadata = false;
+        options.RequireHttpsMetadata = false; // Set true in production
         options.SaveToken = true;
         options.TokenValidationParameters = new TokenValidationParameters
         {
@@ -58,24 +55,19 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = builder.Configuration["JwtSettings:Issuer"],
-            ValidAudience = builder.Configuration["JwtSettings:Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+            ValidIssuer = jwtSettings["Issuer"],
+            ValidAudience = jwtSettings["Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
+
+            // Map role claim to "role"
+            RoleClaimType = "http://schemas.microsoft.com/ws/2008/06/identity/claims/role"
         };
     });
 
-// Configure CORS
-builder.Services.AddCors(options =>
-{
-    options.AddDefaultPolicy(policy =>
-    {
-        policy.AllowAnyOrigin() // Restrict this in production
-              .AllowAnyHeader()
-              .AllowAnyMethod();
-    });
-});
+Console.WriteLine($"Secret Key: {jwtSettings["SecretKey"]}");
 
-// Configure Swagger
+
+// Configure Swagger with JWT Support
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -107,35 +99,26 @@ builder.Services.AddSwaggerGen(options =>
 
 var app = builder.Build();
 
-// Use error handling middleware
-app.UseExceptionHandler("/error");
-app.Map("/error", (HttpContext context) =>
+
+    app.UseSwagger();
+    app.UseSwaggerUI();
+
+if (app.Environment.IsDevelopment())
 {
-    var exception = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>()?.Error;
-    var response = new { error = exception?.Message ?? "An error occurred" };
-    return Results.Json(response, statusCode: 500);
-});
-
-
-app.UseSwagger();
-app.UseSwaggerUI(c =>
-{
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "API v1");
-    c.RoutePrefix = string.Empty; // Serve Swagger at the root (e.g., /)
-});
-
-
-// Use HTTPS redirection only in production
-if (!app.Environment.IsDevelopment())
-{
-    app.UseHttpsRedirection();
+    app.UseDeveloperExceptionPage();
 }
 
-app.UseCors();
+app.UseCors(builder => builder
+    .AllowAnyOrigin()
+    .AllowAnyMethod()
+    .AllowAnyHeader()
+);
+app.UseHttpsRedirection();
+app.UseRouting();
+
 app.UseAuthentication();
 app.UseAuthorization();
+
 app.MapControllers();
 
-// Dynamic port for Cloud Run
-var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
-app.Run($"http://0.0.0.0:{port}");
+app.Run();
