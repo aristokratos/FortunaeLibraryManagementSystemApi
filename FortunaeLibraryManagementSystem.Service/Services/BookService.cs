@@ -7,57 +7,90 @@ namespace FortunaeLibraryManagementSystem.Service.Services
     using FortunaeLibraryManagementSystem.Infrastructure.Interfaces;
     using Microsoft.Extensions.Caching.Distributed;
     using System.Text.Json;
-
-
-
+    using Microsoft.Extensions.Logging;
 
     public class BookService : IBookService
     {
     
         private readonly IBookRepository _bookRepository;
         private readonly IDistributedCache _cache;
-        public BookService(IBookRepository bookRepository, IDistributedCache cache)
+        private readonly ILogger<BookService> _logger;
+        private readonly ImageService _imageService;
+
+        public BookService(IBookRepository bookRepository, IDistributedCache cache, ILogger<BookService> logger, ImageService imageService)
         {
             _bookRepository = bookRepository;
             _cache = cache;
+            _logger = logger;
+            _imageService = imageService;
         }
 
 
         public async Task<BookDTO> AddBookAsync(CreateBookDTO createBookDto)
         {
-            string? imageBase64 = null;
-
-            // Handle image upload
-            if (createBookDto.Image != null)
+            try
             {
-                // Save the image to wwwroot/images
-                var imagePath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot/images", createBookDto.Image.FileName);
+                string? imageUrl = null;
+                if (createBookDto.Image == null)
+                {
+                    throw new ArgumentException("Image cannot be null.", nameof(createBookDto.Image));
+                }
+
+                var imageDirectory = Environment.GetEnvironmentVariable("IMAGE_DIRECTORY")
+                                     ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot/images");
+
+                if (createBookDto.Image != null)
+                {
+                    imageUrl = await _imageService.UploadImageAsync(createBookDto.Image);
+                }
+
+                var uniqueFileName = $"{Guid.NewGuid()}_{createBookDto.Image.FileName}";
+                var imagePath = Path.Combine(imageDirectory, uniqueFileName);
+
                 using (var stream = new FileStream(imagePath, FileMode.Create))
                 {
                     await createBookDto.Image.CopyToAsync(stream);
                 }
 
-                // Convert image to Base64
-                var imageBytes = await File.ReadAllBytesAsync(imagePath);
-                imageBase64 = Convert.ToBase64String(imageBytes);
+                string imageBase64;
+                using (var memoryStream = new MemoryStream())
+                {
+                    await createBookDto.Image.CopyToAsync(memoryStream);
+                    var imageBytes = memoryStream.ToArray();
+                    imageBase64 = Convert.ToBase64String(imageBytes);
+                }
+
+                var book = new Book
+                {
+                    Id = Guid.NewGuid(),
+                    Title = createBookDto.Title,
+                    Author = createBookDto.Author,
+                    Genre = createBookDto.Genre,
+                    ISBN = createBookDto.ISBN,
+                    IsAvailable = true,
+                    BookImage = imageBase64
+                };
+
+                await _bookRepository.AddBookAsync(book);
+                //await _cache.RemoveAsync("AllBooks");
+                //await _cache.RemoveAsync("AvailableBooks");
+
+                // Map and return the result
+                return MapToBookDTO(book);
             }
-
-            var book = new Book
+            catch (UnauthorizedAccessException ex)
             {
-                Id = Guid.NewGuid(),
-                Title = createBookDto.Title,
-                Author = createBookDto.Author,
-                Genre = createBookDto.Genre,
-                ISBN = createBookDto.ISBN,
-                IsAvailable = true,
-                BookImage = imageBase64 
-            };
-
-            await _bookRepository.AddBookAsync(book);
-            await _cache.RemoveAsync("AllBooks");
-            await _cache.RemoveAsync("AvailableBooks");
-            return MapToBookDTO(book);
+                _logger.LogError("Access denied to the path. Exception: {Exception}", ex);
+                throw new Exception("File upload failed due to permission issues.", ex);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("An error occurred while adding the book: {Exception}", ex);
+                throw new Exception("An unexpected error occurred while adding the book.", ex);
+            }
         }
+
+
 
 
         public async Task<BookDTO> UpdateBookAsync(Guid id, UpdateBookDTO updateBookDto)
@@ -85,8 +118,8 @@ namespace FortunaeLibraryManagementSystem.Service.Services
             book.IsAvailable = updateBookDto.IsAvailable ?? book.IsAvailable;
 
             await _bookRepository.UpdateBookAsync(book);
-            await _cache.RemoveAsync("AllBooks");
-            await _cache.RemoveAsync("AvailableBooks");
+            //await _cache.RemoveAsync("AllBooks");
+            //await _cache.RemoveAsync("AvailableBooks");
             return MapToBookDTO(book);
         }
 
@@ -98,8 +131,8 @@ namespace FortunaeLibraryManagementSystem.Service.Services
                         throw new KeyNotFoundException("Book not found");
 
                     await _bookRepository.DeleteBookAsync(book);
-                    await _cache.RemoveAsync("AllBooks");
-                    await _cache.RemoveAsync("AvailableBooks");
+                    //await _cache.RemoveAsync("AllBooks");
+                    //await _cache.RemoveAsync("AvailableBooks");
         }
 
         public async Task<List<BookDTO>> GetAllBooksAsync(bool includeUnavailable = false)
@@ -110,10 +143,10 @@ namespace FortunaeLibraryManagementSystem.Service.Services
             if (!string.IsNullOrEmpty(cachedBooks))
             {
                 // Return cached data if available
-                var cachedBookList = JsonSerializer.Deserialize<List<BookDTO>>(cachedBooks);
-                return includeUnavailable
-                    ? cachedBookList
-                    : cachedBookList.Where(b => b.IsAvailable).ToList();
+                //var cachedBookList = JsonSerializer.Deserialize<List<BookDTO>>(cachedBooks);
+                //return includeUnavailable
+                //    ? cachedBookList
+                //    : cachedBookList.Where(b => b.IsAvailable).ToList();
             }
 
             // Fetch from the database if not cached
@@ -142,11 +175,11 @@ namespace FortunaeLibraryManagementSystem.Service.Services
             {
                 // Return cached data if available
                 var cachedBookList = JsonSerializer.Deserialize<List<BookDTO>>(cachedBooks);
-                return !string.IsNullOrWhiteSpace(filter)
-                    ? cachedBookList.Where(b => b.Title.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
-                                                b.Author.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
-                                                b.Genre.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList()
-                    : cachedBookList;
+                //return !string.IsNullOrWhiteSpace(filter)
+                //    ? cachedBookList.Where(b => b.Title.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                //                                b.Author.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                //                                b.Genre.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList()
+                //    : cachedBookList;
             }
 
             // Fetch from the database if not cached

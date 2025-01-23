@@ -9,16 +9,31 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Microsoft.OpenApi.Models;
 using Microsoft.Extensions.Caching.StackExchangeRedis;
+using Microsoft.Extensions.Configuration;
+using CloudinaryDotNet;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 Microsoft.IdentityModel.Logging.IdentityModelEventSource.ShowPII = true;
-
+var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
 builder.Services.AddStackExchangeRedisCache(options =>
 {
-    options.Configuration = builder.Configuration.GetConnectionString("RedisConnection");
-    options.InstanceName = "LibraryManagementSystem_"; // Prefix for cached keys
+    var redisConnection = Environment.GetEnvironmentVariable("REDIS_CONNECTION_STRING")
+                          ?? builder.Configuration.GetConnectionString("Redis");
+    if (string.IsNullOrEmpty(redisConnection))
+    {
+        builder.Services.AddDistributedMemoryCache();
+    }
+    else
+    {
+        builder.Services.AddStackExchangeRedisCache(options =>
+        {
+            options.Configuration = redisConnection;
+        });
+    }
+
+    options.Configuration = redisConnection;
 });
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<LibraryDbContext>(options => options.UseSqlServer(connectionString));
@@ -28,6 +43,17 @@ builder.Services.AddScoped<IBookRepository, BookRepository>();
 builder.Services.AddScoped<IBookService, BookService>();
 builder.Services.AddScoped<IBorrowingService, BorrowingService>();
 builder.Services.AddScoped<IBorrowingRepository, BorrowingRepository>();
+builder.Services.AddScoped<ImageService>();
+
+
+var cloudinaryAccount = new Account(
+    builder.Configuration["Cloudinary:CloudName"],
+    builder.Configuration["Cloudinary:ApiKey"],
+    builder.Configuration["Cloudinary:ApiSecret"]
+);
+
+var cloudinary = new Cloudinary(cloudinaryAccount);
+builder.Services.AddSingleton(cloudinary);
 
 builder.Services.AddControllers();
 
@@ -41,6 +67,7 @@ var secretKey = jwtSettings["SecretKey"];
 
 if (string.IsNullOrEmpty(secretKey))
 {
+
     throw new Exception("JWT SecretKey is missing!");
 }
 
