@@ -12,7 +12,6 @@ namespace FortunaeLibraryManagementSystem.Service.Services
 
     public class BookService : IBookService
     {
-    
         private readonly IBookRepository _bookRepository;
         private readonly ILogger<BookService> _logger;
         private readonly IImageService _imageService;
@@ -26,7 +25,6 @@ namespace FortunaeLibraryManagementSystem.Service.Services
             _memoryCache = memoryCache;
         }
 
-
         public async Task<BookDTO> AddBookAsync(CreateBookDTO createBookDto)
         {
             try
@@ -36,7 +34,7 @@ namespace FortunaeLibraryManagementSystem.Service.Services
                     throw new ArgumentException("Image cannot be null.", nameof(createBookDto.Image));
                 }
 
-                string imageUrl = await _imageService.UploadImageAsync(createBookDto.Image);
+                string imageName = await _imageService.UploadImageAsync(createBookDto.Image);
 
                 var book = new Book
                 {
@@ -46,17 +44,11 @@ namespace FortunaeLibraryManagementSystem.Service.Services
                     Genre = createBookDto.Genre,
                     ISBN = createBookDto.ISBN,
                     IsAvailable = true,
-                    BookImage = imageUrl // Save the Cloudinary URL in the database
+                    BookImage = imageName 
                 };
 
-                // Save the book details to the repository
                 await _bookRepository.AddBookAsync(book);
 
-                // Optionally clear cached data (if caching is used)
-                //await _cache.RemoveAsync("AllBooks");
-                //await _cache.RemoveAsync("AvailableBooks");
-
-                // Map and return the book details
                 return MapToBookDTO(book);
             }
             catch (Exception ex)
@@ -66,10 +58,6 @@ namespace FortunaeLibraryManagementSystem.Service.Services
             }
         }
 
-
-
-
-
         public async Task<BookDTO> UpdateBookAsync(Guid id, UpdateBookDTO updateBookDto)
         {
             var book = await _bookRepository.GetBookByIdAsync(id);
@@ -78,9 +66,8 @@ namespace FortunaeLibraryManagementSystem.Service.Services
 
             if (updateBookDto.Image != null)
             {
-                // Upload the image to Cloudinary using the image service
-                string imageUrl = await _imageService.UploadImageAsync(updateBookDto.Image);
-                book.BookImage = imageUrl;
+                string imageName = await _imageService.UploadImageAsync(updateBookDto.Image);
+                book.BookImage = imageName;
             }
 
             book.Title = updateBookDto.Title ?? book.Title;
@@ -91,7 +78,6 @@ namespace FortunaeLibraryManagementSystem.Service.Services
 
             await _bookRepository.UpdateBookAsync(book);
 
-            // Remove cache for updated data
             _memoryCache.Remove("AllBooks");
             _memoryCache.Remove("AvailableBooks");
 
@@ -106,24 +92,20 @@ namespace FortunaeLibraryManagementSystem.Service.Services
 
             await _bookRepository.DeleteBookAsync(book);
 
-            // Remove cache for updated data
             _memoryCache.Remove("AllBooks");
             _memoryCache.Remove("AvailableBooks");
         }
 
         public async Task<List<BookDTO>> GetAllBooksAsync(bool includeUnavailable = false)
         {
-            // Check if the data is in-memory cache
             if (!_memoryCache.TryGetValue("AllBooks", out List<BookDTO> cachedBooks))
             {
-                // Fetch from the database if not cached
                 var books = await _bookRepository.GetBooksAsync(null, null, 1, 10);
                 cachedBooks = books.Select(MapToBookDTO).ToList();
 
-                // Cache the data in-memory
                 var cacheOptions = new MemoryCacheEntryOptions
                 {
-                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10) // Cache expires in 10 minutes
+                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10)
                 };
                 _memoryCache.Set("AllBooks", cachedBooks, cacheOptions);
             }
@@ -135,24 +117,20 @@ namespace FortunaeLibraryManagementSystem.Service.Services
 
         public async Task<List<BookDTO>> GetAvailableBooksAsync(string? filter = null)
         {
-            // Check if the data is in-memory cache
             if (!_memoryCache.TryGetValue("AvailableBooks", out List<BookDTO> cachedBooks))
             {
-                // Fetch from the database if not cached
                 var books = await _bookRepository.GetBooksAsync(null, null, 1, 10);
                 books = books.Where(b => b.IsAvailable).ToList();
 
                 cachedBooks = books.Select(MapToBookDTO).ToList();
 
-                // Cache the data in-memory
                 var cacheOptions = new MemoryCacheEntryOptions
                 {
-                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10) // Cache expires in 10 minutes
+                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10)
                 };
                 _memoryCache.Set("AvailableBooks", cachedBooks, cacheOptions);
             }
 
-            // Apply filtering
             return !string.IsNullOrWhiteSpace(filter)
                 ? cachedBooks.Where(b => b.Title.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
                                          b.Author.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
@@ -160,21 +138,19 @@ namespace FortunaeLibraryManagementSystem.Service.Services
                 : cachedBooks;
         }
 
-
-
         private BookDTO MapToBookDTO(Book book)
+        {
+            return new BookDTO
             {
-                return new BookDTO
-                {
-                    Id = book.Id,
-                    Title = book.Title,
-                    Author = book.Author,
-                    Genre = book.Genre,
-                    ISBN = book.ISBN,
-                    IsAvailable = book.IsAvailable,
-                    BookImage = book.BookImage
-                };
-            }
-
+                Id = book.Id,
+                Title = book.Title,
+                Author = book.Author,
+                Genre = book.Genre,
+                ISBN = book.ISBN,
+                IsAvailable = book.IsAvailable,
+                BookImage = book.BookImage
+            };
+        }
     }
+
 }
