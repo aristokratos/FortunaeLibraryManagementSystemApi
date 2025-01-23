@@ -3,9 +3,10 @@
 namespace FortunaeLibraryManagementSystem.Service.Services;
 using CloudinaryDotNet;
 using CloudinaryDotNet.Actions;
+using FortunaeLibraryManagementSystem.Service.Interfaces;
 using Microsoft.AspNetCore.Http;
 
-public class ImageService
+public class ImageService : IImageService
 {
     private readonly Cloudinary _cloudinary;
 
@@ -16,25 +17,24 @@ public class ImageService
 
     public async Task<string> UploadImageAsync(IFormFile file)
     {
-        if (file == null || file.Length == 0)
+        using (var stream = file.OpenReadStream())
         {
-            throw new ArgumentException("File cannot be null or empty");
+            var uploadParams = new ImageUploadParams
+            {
+                File = new FileDescription(file.FileName, stream),
+                Folder = "books",
+                PublicId = Guid.NewGuid().ToString()
+            };
+
+            var uploadResult = await _cloudinary.UploadAsync(uploadParams);
+
+            if (uploadResult.Error != null)
+            {
+                throw new Exception($"Cloudinary error: {uploadResult.Error.Message}");
+            }
+
+            return uploadResult.SecureUrl.ToString();
         }
-
-        var uploadParams = new ImageUploadParams
-        {
-            File = new FileDescription(file.FileName, file.OpenReadStream()),
-            Folder = "books"
-        };
-
-        var uploadResult = await _cloudinary.UploadAsync(uploadParams);
-
-        if (uploadResult.StatusCode != System.Net.HttpStatusCode.OK)
-        {
-            throw new Exception("Failed to upload image to Cloudinary");
-        }
-
-        return uploadResult.SecureUrl.AbsoluteUri;
     }
 }
 
