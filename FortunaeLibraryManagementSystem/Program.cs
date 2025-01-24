@@ -41,6 +41,8 @@ builder.Services.AddScoped<IBorrowingService, BorrowingService>();
 builder.Services.AddScoped<IBorrowingRepository, BorrowingRepository>();
 builder.Services.AddScoped<IImageService, ImageService>();
 builder.Services.AddMemoryCache();
+builder.Services.AddCors();
+
 
 
 

@@ -17,7 +17,6 @@ namespace FortunaeLibraryManagementSystem.Service.Services
         private readonly IConfiguration _configuration;
         private readonly IUserRepository _userRepository;
 
-        // Hardcoded users (replace this with a database or repository)
         private readonly Dictionary<string, (string Password, string Role)> _users = new()
         {
             { "admin", ("password", "Admin") },
