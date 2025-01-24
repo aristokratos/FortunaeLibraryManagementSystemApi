@@ -43,6 +43,7 @@ namespace FortunaeLibraryManagementSystem.Service.Services
                     Author = createBookDto.Author,
                     Genre = createBookDto.Genre,
                     ISBN = createBookDto.ISBN,
+                    Description = createBookDto.Description,
                     IsAvailable = true,
                     BookImage = imageName 
                 };
@@ -73,6 +74,7 @@ namespace FortunaeLibraryManagementSystem.Service.Services
             book.Title = updateBookDto.Title ?? book.Title;
             book.Author = updateBookDto.Author ?? book.Author;
             book.Genre = updateBookDto.Genre ?? book.Genre;
+            book.Description = updateBookDto.Description ?? book.Description;
             book.ISBN = updateBookDto.ISBN ?? book.ISBN;
             book.IsAvailable = updateBookDto.IsAvailable ?? book.IsAvailable;
 
@@ -146,6 +148,7 @@ namespace FortunaeLibraryManagementSystem.Service.Services
                 Title = book.Title,
                 Author = book.Author,
                 Genre = book.Genre,
+                Description = book.Description,
                 ISBN = book.ISBN,
                 IsAvailable = book.IsAvailable,
                 BookImage = book.BookImage
