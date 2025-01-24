@@ -8,6 +8,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using System.Security.Cryptography;
+using FortunaeLibraryManagementSystem.Domain.Enums;
 
 namespace FortunaeLibraryManagementSystem.Service.Services
 {
@@ -31,15 +32,12 @@ namespace FortunaeLibraryManagementSystem.Service.Services
 
         public async Task<bool> RegisterAsync(RegisterDTO registerDto)
         {
-            // Check if user already exists
             var existingUser = await _userRepository.GetUserByUsernameAsync(registerDto.Username);
             if (existingUser != null)
                 throw new InvalidOperationException("Username already exists");
 
-            // Hash the password
             var passwordHash = HashPassword(registerDto.Password);
 
-            // Create the new user
             var user = new User
             {
                 Id = Guid.NewGuid(),
@@ -48,7 +46,6 @@ namespace FortunaeLibraryManagementSystem.Service.Services
                 Role = registerDto.Role
             };
 
-            // Save the user in the database
             await _userRepository.AddUserAsync(user);
 
             return true;
@@ -56,23 +53,19 @@ namespace FortunaeLibraryManagementSystem.Service.Services
 
         public async Task<string> LoginAsync(string username, string password)
         {
-            // Retrieve the user from the database
             var user = await _userRepository.GetUserByUsernameAsync(username);
 
-            // Check if the user exists
             if (user == null)
                 throw new UnauthorizedAccessException("Invalid credentials");
 
-            // Verify the password (hashed)
             if (!VerifyPassword(password, user.PasswordHash))
                 throw new UnauthorizedAccessException("Invalid credentials");
 
-            // Generate JWT token
             return GenerateJwtToken(user.Username, user.Role);
         }
 
 
-        private string GenerateJwtToken(string username, string role)
+        private string GenerateJwtToken(string username, UserRoleEnum role)
         {
             var jwtKey = _configuration["JwtSettings:SecretKey"];
             var jwtIssuer = _configuration["JwtSettings:Issuer"];
@@ -84,11 +77,10 @@ namespace FortunaeLibraryManagementSystem.Service.Services
             var claims = new[]
             {
                 new Claim(ClaimTypes.Name, username),
-                new Claim(ClaimTypes.Role, role),
+                new Claim(ClaimTypes.Role, role.ToString()),
 
             };
 
-            // Ensure the token is properly formatted with "Bearer" prefix
             var tokenHandler = new JwtSecurityTokenHandler();
             var tokenDescriptor = new SecurityTokenDescriptor
             {
@@ -101,7 +93,6 @@ namespace FortunaeLibraryManagementSystem.Service.Services
 
             var token = tokenHandler.CreateToken(tokenDescriptor);
 
-            // Return the full JWT token string with "Bearer" prefix
             return tokenHandler.WriteToken(token);
         }
 
