@@ -8,5 +8,7 @@ namespace FortunaeLibraryManagementSystem.Infrastructure.Interfaces
     {
         Task<User> GetUserByUsernameAsync(string username);
         Task AddUserAsync(User user);
+        Task<User> GetUserByIdAsync(Guid id);
+        Task DeleteUserAsync(User user);
     }
 }

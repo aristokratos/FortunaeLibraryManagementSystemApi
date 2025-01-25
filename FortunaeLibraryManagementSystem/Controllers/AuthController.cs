@@ -44,5 +44,21 @@ namespace FortunaeLibraryManagementSystem.Controllers
                 return Unauthorized("Invalid credentials");
             }
         }
+
+        [HttpDelete("delete")]
+        public async Task<IActionResult> DeleteUser([FromQuery] Guid id)
+        {
+            try
+            {
+                var result = await _authService.DeleteUserAsync(id);
+                if (result)
+                    return Ok("User deleted successfully");
+                return BadRequest("User deletion failed");
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Unauthorized("Invalid credentials");
+            }
+        }
     }
 }

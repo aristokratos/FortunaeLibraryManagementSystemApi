@@ -20,9 +20,20 @@ namespace FortunaeLibraryManagementSystem.Infrastructure.Repositories
             return await _dbContext.Users.FirstOrDefaultAsync(u => u.Username == username);
         }
 
+        public async Task<User> GetUserByIdAsync(Guid id)
+        {
+            return await _dbContext.Users.FirstOrDefaultAsync(u => u.Id == id);
+        }
+
         public async Task AddUserAsync(User user)
         {
             await _dbContext.Users.AddAsync(user);
+            await _dbContext.SaveChangesAsync();
+        }
+
+        public async Task DeleteUserAsync(User user)
+        {
+            _dbContext.Users.Remove(user);
             await _dbContext.SaveChangesAsync();
         }
     }

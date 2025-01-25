@@ -8,5 +8,6 @@ namespace FortunaeLibraryManagementSystem.Service.Interfaces
     {
         Task<string> LoginAsync(string username, string password);
         Task<bool> RegisterAsync(RegisterDTO registerDto);
+        Task<bool> DeleteUserAsync(Guid id);
     }
 }

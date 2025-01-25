@@ -95,7 +95,16 @@ namespace FortunaeLibraryManagementSystem.Service.Services
         }
 
 
+        public async Task<bool> DeleteUserAsync(Guid id)
+        {
+            var user = await _userRepository.GetUserByIdAsync(id);
+            if (user == null)
+                throw new KeyNotFoundException("User not found");
 
+            await _userRepository.DeleteUserAsync(user);
+
+            return true;
+        }
 
         private string HashPassword(string password)
         {
