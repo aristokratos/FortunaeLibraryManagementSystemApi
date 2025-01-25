@@ -31,15 +31,12 @@ namespace FortunaeLibraryManagementSystem.Service.Services
 
         public async Task<bool> RegisterAsync(RegisterDTO registerDto)
         {
-            // Check if user already exists
             var existingUser = await _userRepository.GetUserByUsernameAsync(registerDto.Username);
             if (existingUser != null)
                 throw new InvalidOperationException("Username already exists");
 
-            // Hash the password
             var passwordHash = HashPassword(registerDto.Password);
 
-            // Create the new user
             var user = new User
             {
                 Id = Guid.NewGuid(),
@@ -56,18 +53,14 @@ namespace FortunaeLibraryManagementSystem.Service.Services
 
         public async Task<string> LoginAsync(string username, string password)
         {
-            // Retrieve the user from the database
             var user = await _userRepository.GetUserByUsernameAsync(username);
 
-            // Check if the user exists
             if (user == null)
                 throw new UnauthorizedAccessException("Invalid credentials");
 
-            // Verify the password (hashed)
             if (!VerifyPassword(password, user.PasswordHash))
                 throw new UnauthorizedAccessException("Invalid credentials");
 
-            // Generate JWT token
             return GenerateJwtToken(user.Username, user.Role);
         }
 

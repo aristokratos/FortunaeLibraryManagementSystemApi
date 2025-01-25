@@ -9,17 +9,28 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Microsoft.OpenApi.Models;
 using Microsoft.Extensions.Caching.StackExchangeRedis;
+using Microsoft.Extensions.Configuration;
+using CloudinaryDotNet;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 Microsoft.IdentityModel.Logging.IdentityModelEventSource.ShowPII = true;
+var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
+//var redisConnection = Environment.GetEnvironmentVariable("REDIS_CONNECTION_STRING")
+//                      ?? builder.Configuration.GetConnectionString("Redis");
 
-builder.Services.AddStackExchangeRedisCache(options =>
-{
-    options.Configuration = builder.Configuration.GetConnectionString("RedisConnection");
-    options.InstanceName = "LibraryManagementSystem_"; // Prefix for cached keys
-});
+//if (string.IsNullOrEmpty(redisConnection))
+//{
+//    builder.Services.AddDistributedMemoryCache();
+//}
+//else
+//{
+//    builder.Services.AddStackExchangeRedisCache(options =>
+//    {
+//        options.Configuration = redisConnection;
+//    });
+//}
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<LibraryDbContext>(options => options.UseSqlServer(connectionString));
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -28,10 +39,24 @@ builder.Services.AddScoped<IBookRepository, BookRepository>();
 builder.Services.AddScoped<IBookService, BookService>();
 builder.Services.AddScoped<IBorrowingService, BorrowingService>();
 builder.Services.AddScoped<IBorrowingRepository, BorrowingRepository>();
+builder.Services.AddScoped<IImageService, ImageService>();
+builder.Services.AddMemoryCache();
+builder.Services.AddCors();
+
+
+
+
+var cloudinaryAccount = new Account(
+    builder.Configuration["Cloudinary:CloudName"],
+    builder.Configuration["Cloudinary:ApiKey"],
+    builder.Configuration["Cloudinary:ApiSecret"]
+);
+var cloudinary = new Cloudinary(cloudinaryAccount);
+
+builder.Services.AddSingleton(cloudinary);
 
 builder.Services.AddControllers();
 
-// Configure JWT Authentication
 var jwtKey = builder.Configuration["JwtSettings:SecretKey"];
 var jwtIssuer = builder.Configuration["JwtSettings:Issuer"];
 var jwtAudience = builder.Configuration["JwtSettings:Audience"];
@@ -41,6 +66,7 @@ var secretKey = jwtSettings["SecretKey"];
 
 if (string.IsNullOrEmpty(secretKey))
 {
+
     throw new Exception("JWT SecretKey is missing!");
 }
 
@@ -58,8 +84,6 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidIssuer = jwtSettings["Issuer"],
             ValidAudience = jwtSettings["Audience"],
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
-
-            // Map role claim to "role"
             RoleClaimType = "http://schemas.microsoft.com/ws/2008/06/identity/claims/role"
         };
     });
@@ -67,7 +91,6 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 Console.WriteLine($"Secret Key: {jwtSettings["SecretKey"]}");
 
 
-// Configure Swagger with JWT Support
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -99,16 +122,24 @@ builder.Services.AddSwaggerGen(options =>
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
+
     app.UseSwagger();
     app.UseSwaggerUI();
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseDeveloperExceptionPage();
 }
 
+app.UseCors(builder => builder
+    .AllowAnyOrigin()
+    .AllowAnyMethod()
+    .AllowAnyHeader()
+);
 app.UseHttpsRedirection();
+app.UseRouting();
 
-app.UseAuthentication(); 
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
