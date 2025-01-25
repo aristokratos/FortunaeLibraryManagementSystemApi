@@ -8,7 +8,6 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using System.Security.Cryptography;
-using FortunaeLibraryManagementSystem.Domain.Enums;
 
 namespace FortunaeLibraryManagementSystem.Service.Services
 {
@@ -17,6 +16,7 @@ namespace FortunaeLibraryManagementSystem.Service.Services
         private readonly IConfiguration _configuration;
         private readonly IUserRepository _userRepository;
 
+        // Hardcoded users (replace this with a database or repository)
         private readonly Dictionary<string, (string Password, string Role)> _users = new()
         {
             { "admin", ("password", "Admin") },
@@ -45,6 +45,7 @@ namespace FortunaeLibraryManagementSystem.Service.Services
                 Role = registerDto.Role
             };
 
+            // Save the user in the database
             await _userRepository.AddUserAsync(user);
 
             return true;
@@ -64,7 +65,7 @@ namespace FortunaeLibraryManagementSystem.Service.Services
         }
 
 
-        private string GenerateJwtToken(string username, UserRoleEnum role)
+        private string GenerateJwtToken(string username, string role)
         {
             var jwtKey = _configuration["JwtSettings:SecretKey"];
             var jwtIssuer = _configuration["JwtSettings:Issuer"];
@@ -76,10 +77,11 @@ namespace FortunaeLibraryManagementSystem.Service.Services
             var claims = new[]
             {
                 new Claim(ClaimTypes.Name, username),
-                new Claim(ClaimTypes.Role, role.ToString()),
+                new Claim(ClaimTypes.Role, role),
 
             };
 
+            // Ensure the token is properly formatted with "Bearer" prefix
             var tokenHandler = new JwtSecurityTokenHandler();
             var tokenDescriptor = new SecurityTokenDescriptor
             {
@@ -92,6 +94,7 @@ namespace FortunaeLibraryManagementSystem.Service.Services
 
             var token = tokenHandler.CreateToken(tokenDescriptor);
 
+            // Return the full JWT token string with "Bearer" prefix
             return tokenHandler.WriteToken(token);
         }
 
