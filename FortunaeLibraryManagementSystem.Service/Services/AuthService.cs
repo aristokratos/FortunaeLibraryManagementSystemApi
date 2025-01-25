@@ -16,7 +16,6 @@ namespace FortunaeLibraryManagementSystem.Service.Services
         private readonly IConfiguration _configuration;
         private readonly IUserRepository _userRepository;
 
-        // Hardcoded users (replace this with a database or repository)
         private readonly Dictionary<string, (string Password, string Role)> _users = new()
         {
             { "admin", ("password", "Admin") },
@@ -45,7 +44,6 @@ namespace FortunaeLibraryManagementSystem.Service.Services
                 Role = registerDto.Role
             };
 
-            // Save the user in the database
             await _userRepository.AddUserAsync(user);
 
             return true;
@@ -81,7 +79,6 @@ namespace FortunaeLibraryManagementSystem.Service.Services
 
             };
 
-            // Ensure the token is properly formatted with "Bearer" prefix
             var tokenHandler = new JwtSecurityTokenHandler();
             var tokenDescriptor = new SecurityTokenDescriptor
             {
@@ -94,7 +91,6 @@ namespace FortunaeLibraryManagementSystem.Service.Services
 
             var token = tokenHandler.CreateToken(tokenDescriptor);
 
-            // Return the full JWT token string with "Bearer" prefix
             return tokenHandler.WriteToken(token);
         }
 
