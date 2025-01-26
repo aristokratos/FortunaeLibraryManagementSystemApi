@@ -19,7 +19,6 @@ namespace FortunaeLibraryManagementSystem.Infrastructure.Repositories
         {
             IQueryable<Book> query = _dbContext.Books;
 
-            // Apply filtering
             if (!string.IsNullOrWhiteSpace(filter))
             {
                 query = query.Where(book =>
@@ -28,23 +27,30 @@ namespace FortunaeLibraryManagementSystem.Infrastructure.Repositories
                     book.Genre.Contains(filter, StringComparison.OrdinalIgnoreCase));
             }
 
-            // Apply sorting
             if (!string.IsNullOrWhiteSpace(sortBy))
             {
-                query = sortBy switch
+                query = sortBy.ToLower() switch
                 {
                     "title" => query.OrderBy(book => book.Title),
                     "author" => query.OrderBy(book => book.Author),
                     "genre" => query.OrderBy(book => book.Genre),
-                    _ => query
+                    "rating" => query.OrderByDescending(book => book.AverageRating), 
+                    _ => query.OrderBy(book => book.Title) 
                 };
             }
+            else
+            {
+                query = query.OrderBy(book => book.Title);
+            }
 
-            // Apply pagination
+            if (page <= 0) page = 1;
+            if (pageSize <= 0) pageSize = 10;
+
             query = query.Skip((page - 1) * pageSize).Take(pageSize);
 
             return await query.ToListAsync();
         }
+
 
         public async Task<Book> GetBookByIdAsync(Guid id)
         {

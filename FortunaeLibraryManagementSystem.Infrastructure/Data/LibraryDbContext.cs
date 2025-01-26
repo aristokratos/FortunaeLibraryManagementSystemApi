@@ -38,6 +38,9 @@ namespace FortunaeLibraryManagementSystem.Infrastructure.Data
                 .HasOne(r => r.Book)
                 .WithMany(b => b.Ratings)
                 .HasForeignKey(r => r.BookId);
+            modelBuilder.Entity<Book>()
+                .Property(b => b.AverageRating)
+                .HasColumnType("decimal(5,2)");
 
             modelBuilder.Entity<Rating>()
                 .HasOne(r => r.User)
