@@ -31,6 +31,9 @@ namespace FortunaeLibraryManagementSystem.Infrastructure.Migrations
                     b.Property<string>("Author")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<decimal>("AverageRating")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<string>("BookImage")
                         .HasColumnType("nvarchar(max)");
 
@@ -63,7 +66,14 @@ namespace FortunaeLibraryManagementSystem.Infrastructure.Migrations
                     b.Property<Guid>("BookId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("BookTitle")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<DateTime>("BorrowedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("ExpectedReturnDate")
                         .HasColumnType("datetime2");
 
                     b.Property<bool>("IsOverdue")
@@ -87,6 +97,41 @@ namespace FortunaeLibraryManagementSystem.Infrastructure.Migrations
                     b.ToTable("Borrowings");
                 });
 
+            modelBuilder.Entity("FortunaeLibraryManagementSystem.Domain.Entities.Rating", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("BookId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Comment")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("GETDATE()");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Value")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BookId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("Ratings", t =>
+                        {
+                            t.HasCheckConstraint("CHK_Rating_Value", "[Value] BETWEEN 1 AND 5");
+                        });
+                });
+
             modelBuilder.Entity("FortunaeLibraryManagementSystem.Domain.Entities.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -96,8 +141,8 @@ namespace FortunaeLibraryManagementSystem.Infrastructure.Migrations
                     b.Property<string>("PasswordHash")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<int>("Role")
-                        .HasColumnType("int");
+                    b.Property<string>("Role")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Username")
                         .HasColumnType("nvarchar(max)");
@@ -124,6 +169,30 @@ namespace FortunaeLibraryManagementSystem.Infrastructure.Migrations
                     b.Navigation("Book");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("FortunaeLibraryManagementSystem.Domain.Entities.Rating", b =>
+                {
+                    b.HasOne("FortunaeLibraryManagementSystem.Domain.Entities.Book", "Book")
+                        .WithMany("Ratings")
+                        .HasForeignKey("BookId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("FortunaeLibraryManagementSystem.Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Book");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("FortunaeLibraryManagementSystem.Domain.Entities.Book", b =>
+                {
+                    b.Navigation("Ratings");
                 });
 #pragma warning restore 612, 618
         }

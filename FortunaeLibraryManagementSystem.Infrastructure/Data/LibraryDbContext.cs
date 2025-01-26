@@ -14,12 +14,12 @@ namespace FortunaeLibraryManagementSystem.Infrastructure.Data
         public DbSet<User> Users { get; set; }
         public DbSet<Book> Books { get; set; }
         public DbSet<Borrowing> Borrowings { get; set; }
+        public DbSet<Rating> Ratings { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
 
-            // Borrowing Relationships
             modelBuilder.Entity<Borrowing>()
                 .HasOne(b => b.User)
                 .WithMany()
@@ -30,11 +30,31 @@ namespace FortunaeLibraryManagementSystem.Infrastructure.Data
                 .WithMany()
                 .HasForeignKey(b => b.BookId);
 
-            // Specify precision and scale for Penalty property
             modelBuilder.Entity<Borrowing>()
                 .Property(b => b.Penalty)
-                .HasColumnType("decimal(18,2)"); // Adjust precision and scale as needed
-        }
+                .HasColumnType("decimal(18,2)");
 
+            modelBuilder.Entity<Rating>()
+                .HasOne(r => r.Book)
+                .WithMany(b => b.Ratings)
+                .HasForeignKey(r => r.BookId);
+
+            modelBuilder.Entity<Rating>()
+                .HasOne(r => r.User)
+                .WithMany()
+                .HasForeignKey(r => r.UserId);
+
+            modelBuilder.Entity<Rating>()
+                .Property(r => r.Value)
+                .IsRequired();
+
+            modelBuilder.Entity<Rating>()
+                .HasCheckConstraint("CHK_Rating_Value", "[Value] BETWEEN 1 AND 5");
+
+            modelBuilder.Entity<Rating>()
+                .Property(r => r.CreatedAt)
+                .HasDefaultValueSql("GETDATE()");
+        }
     }
+
 }

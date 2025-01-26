@@ -1,8 +1,11 @@
-﻿using FortunaeLibraryManagementSystem.Service.DTOs;
+﻿using Azure.Core;
+using FortunaeLibraryManagementSystem.Domain.Entities;
+using FortunaeLibraryManagementSystem.Service.DTOs;
 using FortunaeLibraryManagementSystem.Service.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace FortunaeLibraryManagementSystem.Controllers
 {
@@ -20,61 +23,144 @@ namespace FortunaeLibraryManagementSystem.Controllers
 
         [HttpPost]
         [Authorize(Roles = "Member")]
-        public async Task<IActionResult> BorrowBook([FromQuery] Guid userId, [FromBody] BorrowBookDTO borrowBookDto)
+        public async Task<IActionResult> BorrowBook(Guid userId, Guid bookId)
         {
-            var borrowing = await _borrowingService.BorrowBookAsync(userId, borrowBookDto);
-            return Ok(borrowing);
+            try
+            {
+                var borrowingDto = await _borrowingService.BorrowBookAsync(userId, bookId);
+                return Ok(borrowingDto);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                // Specific error when book or borrowing record is not found
+                return NotFound(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                // Generic error handler for unexpected issues
+                return StatusCode(500, new { message = "An unexpected error occurred.", details = ex.Message });
+            }
         }
-
 
         [HttpPut("{id}/return")]
         [Authorize(Roles = "Member")]
-        public async Task<IActionResult> ReturnBook(Guid id)
+        public async Task<IActionResult> ReturnBook(Guid borrowingId, [FromBody] ReturnBookRequest request)
         {
-            await _borrowingService.ReturnBookAsync(id);
-            return NoContent();
+            try
+            {
+                await _borrowingService.ReturnBookAsync(borrowingId, request.RatingValue, request.Comment);
+                return NoContent();
+            }
+            catch (KeyNotFoundException ex)
+            {
+                // Book or borrowing record not found
+                return NotFound(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "An unexpected error occurred.", details = ex.Message });
+            }
         }
 
         [HttpGet("history")]
         [Authorize(Roles = "Member")]
         public async Task<IActionResult> GetBorrowingHistory()
         {
-            var userId = Guid.Parse(User.Identity.Name);
-            var history = await _borrowingService.GetMemberBorrowingHistoryAsync(userId);
-            return Ok(history);
+            try
+            {
+                var userId = Guid.Parse(User.Identity.Name);
+                var history = await _borrowingService.GetMemberBorrowingHistoryAsync(userId);
+                return Ok(history);
+            }
+            catch (FormatException ex)
+            {
+                // Handle invalid GUID format if needed
+                return BadRequest(new { message = "Invalid user identifier.", details = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "An unexpected error occurred.", details = ex.Message });
+            }
         }
 
         [HttpGet("active")]
         [Authorize(Roles = "Member")]
         public async Task<IActionResult> GetActiveBorrowings()
         {
-            var userId = Guid.Parse(User.Identity.Name);
-            var activeBorrowings = await _borrowingService.GetActiveBorrowingsAsync(userId);
-            return Ok(activeBorrowings);
+            try
+            {
+               
+                var activeBorrowings = await _borrowingService.GetAllBorrowingsAsync();
+                return Ok(activeBorrowings);
+            }
+            catch (FormatException ex)
+            {
+                return BadRequest(new { message = "Invalid user identifier.", details = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "An unexpected error occurred.", details = ex.Message });
+            }
         }
 
         [HttpGet("admin")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetAllBorrowings()
         {
-            var borrowings = await _borrowingService.GetAllBorrowingsAsync();
-            return Ok(borrowings);
+            try
+            {
+                var borrowings = await _borrowingService.GetAllBorrowingsAsync();
+                return Ok(borrowings);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "An unexpected error occurred.", details = ex.Message });
+            }
         }
 
         [HttpPut("{id}/penalize")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> PenalizeMember(Guid id, [FromQuery] decimal penalty)
         {
-            await _borrowingService.PenalizeMemberAsync(id, penalty);
-            return NoContent();
+            try
+            {
+                await _borrowingService.PenalizeMemberAsync(id, penalty);
+                return NoContent();
+            }
+            catch (KeyNotFoundException ex)
+            {
+                // Borrowing record not found
+                return NotFound(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "An unexpected error occurred.", details = ex.Message });
+            }
         }
 
         [HttpPut("{id}/mark-returned")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> MarkBookAsReturned(Guid id)
         {
-            await _borrowingService.MarkBookAsReturnedAsync(id);
-            return NoContent();
+            try
+            {
+                await _borrowingService.MarkBookAsReturnedAsync(id);
+                return NoContent();
+            }
+            catch (KeyNotFoundException ex)
+            {
+                // Borrowing record not found
+                return NotFound(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "An unexpected error occurred.", details = ex.Message });
+            }
         }
+
     }
 }

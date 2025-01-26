@@ -32,17 +32,25 @@ namespace FortunaeLibraryManagementSystem.Infrastructure.Repositories
         {
             return await _dbContext.Borrowings
                 .Include(b => b.Book) 
-                .Include(b => b.User) 
+                .Include(b => b.User)
                 .FirstOrDefaultAsync(b => b.Id == id);
         }
 
         public async Task<List<Borrowing>> GetActiveBorrowingsByUserAsync(Guid userId)
         {
-            return await _dbContext.Borrowings
+            var borrowings = await _dbContext.Borrowings
                 .Include(b => b.Book)
-                .Where(b => b.UserId == userId && b.ReturnedAt == null) // Active borrowings
+                .Where(b => b.UserId == userId && b.ReturnedAt == null)
                 .ToListAsync();
+
+            if (borrowings == null || borrowings.Count == 0)
+            {
+                return new List<Borrowing>();
+            }
+
+            return borrowings;
         }
+
 
         public async Task<List<Borrowing>> GetBorrowingHistoryByUserAsync(Guid userId)
         {
@@ -55,11 +63,46 @@ namespace FortunaeLibraryManagementSystem.Infrastructure.Repositories
 
         public async Task<List<Borrowing>> GetAllBorrowingsAsync()
         {
-            return await _dbContext.Borrowings
+            var borrowings = await _dbContext.Borrowings
                 .Include(b => b.Book)
                 .Include(b => b.User)
                 .OrderByDescending(b => b.BorrowedAt)
                 .ToListAsync();
+
+            foreach (var borrowing in borrowings)
+            {
+                if (borrowing.Book == null)
+                {
+                    return null;
+                }
+
+                if (borrowing.User == null)
+                {
+                    return null;   
+                }
+            }
+
+            return borrowings;
         }
+
+
+        public async Task<List<Borrowing>> GetOverdueBorrowingsAsync()
+        {
+            return await _dbContext.Borrowings
+                .Include(b => b.Book)
+                .Include(b => b.User)
+                .Where(b => b.ExpectedReturnDate < DateTime.UtcNow && b.ReturnedAt == null) 
+                .ToListAsync();
+        }
+
+        public async Task<List<Borrowing>> GetAllActiveBorrowingsAsync()
+        {
+            return await _dbContext.Borrowings
+                .Include(b => b.Book)
+                .Include(b => b.User)
+                .Where(b => b.ReturnedAt == null) 
+                .ToListAsync();
+        }
+
     }
 }

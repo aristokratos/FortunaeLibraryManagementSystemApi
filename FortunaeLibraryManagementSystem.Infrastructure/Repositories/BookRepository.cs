@@ -50,6 +50,10 @@ namespace FortunaeLibraryManagementSystem.Infrastructure.Repositories
         {
             return await _dbContext.Books.FindAsync(id);
         }
+        public async Task<List<Book>> GetAvailableBooksAsync()
+        {
+            return await _dbContext.Books.Where(book => book.IsAvailable).ToListAsync();
+        }
 
         public async Task AddBookAsync(Book book)
         {
@@ -68,5 +72,6 @@ namespace FortunaeLibraryManagementSystem.Infrastructure.Repositories
             _dbContext.Books.Remove(book);
             await _dbContext.SaveChangesAsync();
         }
+
     }
 }
