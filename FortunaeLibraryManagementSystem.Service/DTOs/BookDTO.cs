@@ -12,5 +12,6 @@ namespace FortunaeLibraryManagementSystem.Service.DTOs
         public string? ISBN { get; set; }
         public bool IsAvailable { get; set; }
         public string? BookImage { get; set; }
+        public decimal AverageRating { get; set; }
     }
 }
