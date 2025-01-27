@@ -62,7 +62,6 @@ namespace FortunaeLibraryManagementSystem.Infrastructure.Repositories
                 throw new Exception("No borrowed books available."); 
             }
 
-           // var overdueBooks = borrowedBooks.Where(b => b.ExpectedReturnDate < DateTime.UtcNow).ToList(); 
 
             if (!borrowedBooks.Any())
             {
