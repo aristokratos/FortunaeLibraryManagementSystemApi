@@ -128,11 +128,10 @@ namespace FortunaeLibraryManagementSystem.Controllers
 
         [HttpGet("borrowedBooks")]
         [Authorize(Roles = "Member")]
-        public async Task<IActionResult> GetBorrowedBooks()
+        public async Task<IActionResult> GetBorrowedBooks(Guid userId)
         {
             try
             {
-                var userId = Guid.Parse(User.Identity.Name);
                 var borrowedBooks = await _borrowingService.GetBorrowedBooks(userId);
                 return Ok(borrowedBooks);
             }
