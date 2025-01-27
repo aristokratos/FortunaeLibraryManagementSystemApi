@@ -107,6 +107,45 @@ namespace FortunaeLibraryManagementSystem.Controllers
             }
         }
 
+        [HttpGet("overdue")]
+        [Authorize(Roles = "Member")]
+        public async Task<IActionResult> GetOverdueBorrowings()
+        {
+            try
+            {
+                var overdueBorrowings = await _borrowingService.GetOverdueBorrowingsAsync();
+                return Ok(overdueBorrowings);
+            }
+            catch (FormatException ex)
+            {
+                return BadRequest(new { message = "Invalid user identifier.", details = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "An unexpected error occurred.", details = ex.Message });
+            }
+        }
+
+        [HttpGet("borrowedBooks")]
+        [Authorize(Roles = "Member")]
+        public async Task<IActionResult> GetBorrowedBooks()
+        {
+            try
+            {
+                var userId = Guid.Parse(User.Identity.Name);
+                var borrowedBooks = await _borrowingService.GetBorrowedBooks(userId);
+                return Ok(borrowedBooks);
+            }
+            catch (FormatException ex)
+            {
+                return BadRequest(new { message = "Invalid user identifier.", details = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "An unexpected error occurred.", details = ex.Message });
+            }
+        }
+
         [HttpGet("admin")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetAllBorrowings()

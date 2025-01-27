@@ -180,6 +180,12 @@ namespace FortunaeLibraryManagementSystem.Service.Services
             return borrowings.Select(b => MapToBorrowingDTO(b)).ToList();
         }
 
+        public async Task<List<BorrowingDTO>> GetBorrowedBooks (Guid userId)
+        {
+            var borrowings = await _borrowingRepository.GetBorrowedBooks(userId);
+            return borrowings.Select(b => MapToBorrowingDTO(b)).ToList();
+        }
+
         public async Task<List<BorrowingDTO>> GetAllBorrowingsAsync()
         {
             var borrowings = await _borrowingRepository.GetAllBorrowingsAsync();

@@ -25,6 +25,7 @@ namespace FortunaeLibraryManagementSystem.Service.Interfaces
 
         // Book return and status updates
         Task MarkBookAsReturnedAsync(Guid borrowingId);
+        Task<List<BorrowingDTO>> GetBorrowedBooks(Guid userId);
     }
 
 }

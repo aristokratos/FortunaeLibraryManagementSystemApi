@@ -50,6 +50,27 @@ namespace FortunaeLibraryManagementSystem.Infrastructure.Repositories
 
             return borrowings;
         }
+        public async Task<List<Borrowing>> GetBorrowedBooks(Guid userId)
+        {
+            var borrowedBooks = await _dbContext.Borrowings
+                .Include(b => b.Book)
+                .Where(b => b.UserId == userId && b.ReturnedAt == null) 
+                .ToListAsync();
+
+            if (borrowedBooks == null || !borrowedBooks.Any())
+            {
+                throw new Exception("No borrowed books available."); 
+            }
+
+            var overdueBooks = borrowedBooks.Where(b => b.ExpectedReturnDate < DateTime.UtcNow).ToList(); 
+
+            if (!overdueBooks.Any())
+            {
+                throw new Exception("No overdue borrowed books available.");
+            }
+
+            return overdueBooks;
+        }
 
 
         public async Task<List<Borrowing>> GetBorrowingHistoryByUserAsync(Guid userId)

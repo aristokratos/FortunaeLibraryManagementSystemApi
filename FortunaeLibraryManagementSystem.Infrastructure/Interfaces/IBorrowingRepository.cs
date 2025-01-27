@@ -12,5 +12,6 @@ namespace FortunaeLibraryManagementSystem.Infrastructure.Interfaces
         Task<List<Borrowing>> GetActiveBorrowingsByUserAsync(Guid userId);
         Task<List<Borrowing>> GetBorrowingHistoryByUserAsync(Guid userId);
         Task<List<Borrowing>> GetAllBorrowingsAsync();
+        Task<List<Borrowing>> GetBorrowedBooks(Guid userId);
     }
 }
