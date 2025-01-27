@@ -59,11 +59,11 @@ namespace FortunaeLibraryManagementSystem.Service.Services
             if (!VerifyPassword(password, user.PasswordHash))
                 throw new UnauthorizedAccessException("Invalid credentials");
 
-            return GenerateJwtToken(user.Username, user.Role);
+            return GenerateJwtToken(user.Username, user.Role, user.Id.ToString());
         }
 
 
-        private string GenerateJwtToken(string username, string role)
+        private string GenerateJwtToken(string username, string role, string userId)
         {
             var jwtKey = _configuration["JwtSettings:SecretKey"];
             var jwtIssuer = _configuration["JwtSettings:Issuer"];
@@ -74,10 +74,10 @@ namespace FortunaeLibraryManagementSystem.Service.Services
 
             var claims = new[]
             {
-                new Claim(ClaimTypes.Name, username),
-                new Claim(ClaimTypes.Role, role),
-
-            };
+            new Claim(ClaimTypes.Name, username),
+            new Claim(ClaimTypes.Role, role),
+            new Claim("UserId", userId)
+        };
 
             var tokenHandler = new JwtSecurityTokenHandler();
             var tokenDescriptor = new SecurityTokenDescriptor
@@ -93,6 +93,7 @@ namespace FortunaeLibraryManagementSystem.Service.Services
 
             return tokenHandler.WriteToken(token);
         }
+
 
 
         public async Task<bool> DeleteUserAsync(Guid id)
