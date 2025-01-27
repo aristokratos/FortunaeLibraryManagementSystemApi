@@ -62,14 +62,14 @@ namespace FortunaeLibraryManagementSystem.Infrastructure.Repositories
                 throw new Exception("No borrowed books available."); 
             }
 
-            var overdueBooks = borrowedBooks.Where(b => b.ExpectedReturnDate < DateTime.UtcNow).ToList(); 
+           // var overdueBooks = borrowedBooks.Where(b => b.ExpectedReturnDate < DateTime.UtcNow).ToList(); 
 
-            if (!overdueBooks.Any())
+            if (!borrowedBooks.Any())
             {
-                throw new Exception("No overdue borrowed books available.");
+                throw new Exception("No borrowed books available.");
             }
 
-            return overdueBooks;
+            return borrowedBooks;
         }
 
 
