@@ -71,6 +71,12 @@ namespace FortunaeLibraryManagementSystem.Infrastructure.Repositories
             return borrowedBooks;
         }
 
+        public async Task<List<Borrowing>> GetAllBorrowedBooks()
+        {             return await _dbContext.Borrowings
+                .Include(b => b.Book)
+                .Where(b => b.ReturnedAt == null)
+                .ToListAsync();
+        }
 
         public async Task<List<Borrowing>> GetBorrowingHistoryByUserAsync(Guid userId)
         {

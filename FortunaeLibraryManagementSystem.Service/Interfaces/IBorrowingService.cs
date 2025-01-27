@@ -1,5 +1,6 @@
 ﻿
 
+using FortunaeLibraryManagementSystem.Domain.Entities;
 using FortunaeLibraryManagementSystem.Service.DTOs;
 
 namespace FortunaeLibraryManagementSystem.Service.Interfaces
@@ -9,6 +10,7 @@ namespace FortunaeLibraryManagementSystem.Service.Interfaces
         // Borrowing-related operations
         Task<BorrowingDTO> BorrowBookAsync(Guid userId, Guid bookId);
         Task AddRatingAsync(Guid bookId, Guid userId, int value, string? comment = null);
+        Task<List<Borrowing>> GetAllBorrowedBooks();
 
         // Retrieval operations
         Task<List<BorrowingDTO>> GetMemberBorrowingHistoryAsync(Guid userId);

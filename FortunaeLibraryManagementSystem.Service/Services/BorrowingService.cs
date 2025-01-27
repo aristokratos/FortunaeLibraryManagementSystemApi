@@ -6,6 +6,7 @@ using FortunaeLibraryManagementSystem.Service.Interfaces;
 using FortunaeLibraryManagementSystem.Domain.Entities;
 using System;
 using FortunaeLibraryManagementSystem.Infrastructure.Repositories;
+using System.Threading.Tasks;
 
 namespace FortunaeLibraryManagementSystem.Service.Services
 {
@@ -198,7 +199,10 @@ namespace FortunaeLibraryManagementSystem.Service.Services
 
             return borrowings.Select(b => MapToBorrowingDTO(b)).ToList();
         }
-
+        public async Task<List<Borrowing>> GetAllBorrowedBooks()
+            {
+            return await _borrowingRepository.GetAllBorrowedBooks();
+        }
 
         public async Task PenalizeMemberAsync(Guid borrowingId, decimal penalty)
         {

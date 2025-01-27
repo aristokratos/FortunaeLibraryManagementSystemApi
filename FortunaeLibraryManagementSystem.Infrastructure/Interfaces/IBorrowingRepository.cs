@@ -1,6 +1,7 @@
 ﻿
 
 using FortunaeLibraryManagementSystem.Domain.Entities;
+using System.Threading.Tasks;
 
 namespace FortunaeLibraryManagementSystem.Infrastructure.Interfaces
 {
@@ -13,5 +14,6 @@ namespace FortunaeLibraryManagementSystem.Infrastructure.Interfaces
         Task<List<Borrowing>> GetBorrowingHistoryByUserAsync(Guid userId);
         Task<List<Borrowing>> GetAllBorrowingsAsync();
         Task<List<Borrowing>> GetBorrowedBooks(Guid userId);
+        Task<List<Borrowing>> GetAllBorrowedBooks();
     }
 }

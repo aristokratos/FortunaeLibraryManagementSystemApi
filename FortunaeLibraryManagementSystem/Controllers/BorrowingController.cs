@@ -145,6 +145,20 @@ namespace FortunaeLibraryManagementSystem.Controllers
             }
         }
 
+        [HttpGet("borrowedBooks/all")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> GetAllBorrowedBooks()
+        {
+            try
+            {
+                var borrowedBooks = await _borrowingService.GetAllBorrowedBooks();
+                return Ok(borrowedBooks);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "An unexpected error occurred.", details = ex.Message });
+            }
+        }
         [HttpGet("admin")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetAllBorrowings()
