@@ -58,6 +58,17 @@ namespace FortunaeLibraryManagementSystem.Controllers
             var books = await _bookService.GetAvailableBooksAsync(filter);
             return Ok(books);
         }
+        [HttpGet("search")]
+        [AllowAnonymous]
+        public async Task<IActionResult> SearchBooks(
+           [FromQuery] string? title = null,
+           [FromQuery] string? author = null,
+           [FromQuery] string? genre = null,
+           [FromQuery] bool? isAvailable = null)
+        {
+            var books = await _bookService.SearchBooksAsync(title, author, genre, isAvailable);
+            return Ok(books);
+        }
         /// <summary>
         /// Get a book by its ID.
         /// </summary>
@@ -92,7 +103,6 @@ namespace FortunaeLibraryManagementSystem.Controllers
             return Ok(books);
         }
 
-        // GET: api/books/top-rated/cached
         [HttpGet("top-rated/cached")]
         public async Task<IActionResult> GetCachedTopRatedBooks()
         {
@@ -100,19 +110,8 @@ namespace FortunaeLibraryManagementSystem.Controllers
             return Ok(books);
         }
 
-        // GET: api/books/search
-        [HttpGet("search")]
-        public async Task<IActionResult> SearchBooks(
-            [FromQuery] string? title = null,
-            [FromQuery] string? author = null,
-            [FromQuery] string? genre = null,
-            [FromQuery] bool? isAvailable = null)
-        {
-            var books = await _bookService.SearchBooksAsync(title, author, genre, isAvailable);
-            return Ok(books);
-        }
+       
 
-        // GET: api/books/{bookId}/related
         [HttpGet("{bookId}/related")]
         public async Task<IActionResult> GetRelatedBooks(Guid bookId)
         {
@@ -126,7 +125,6 @@ namespace FortunaeLibraryManagementSystem.Controllers
             return Ok(ratings);
         }
 
-        // GET: api/ratings/user/{userId}
         [HttpGet("user/{userId}")]
         public async Task<IActionResult> GetRatingsByUserId(Guid userId)
         {
