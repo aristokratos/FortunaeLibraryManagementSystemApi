@@ -9,6 +9,7 @@ namespace FortunaeLibraryManagementSystem.Service.Services
     using System.Text.Json;
     using Microsoft.Extensions.Logging;
     using Microsoft.Extensions.Caching.Memory;
+    using FortunaeLibraryManagementSystem.Infrastructure.Migrations;
 
     public class BookService : IBookService
     {
@@ -180,8 +181,19 @@ namespace FortunaeLibraryManagementSystem.Service.Services
 
             var ratings = await _ratingRepository.GetRatingsByBookIdAsync(bookId);
             var book = await _bookRepository.GetBookByIdAsync(bookId);
+            Console.WriteLine($"Ratings: {ratings.Count()}"); 
+            if (ratings.Any())
+            {
+                book.AverageRating = (decimal)ratings.Average(r => r.Value);
+            }
+            else
+            {
+                book.AverageRating = 0;  
+            }
 
+            
             book.AverageRating = (decimal)ratings.Average(r => r.Value);
+
             await _bookRepository.UpdateBookAsync(book);
         }
 
@@ -277,7 +289,8 @@ namespace FortunaeLibraryManagementSystem.Service.Services
                 Description = book.Description,
                 ISBN = book.ISBN,
                 IsAvailable = book.IsAvailable,
-                BookImage = book.BookImage
+                BookImage = book.BookImage,
+                AverageRating = book.AverageRating
             };
         }
     }
