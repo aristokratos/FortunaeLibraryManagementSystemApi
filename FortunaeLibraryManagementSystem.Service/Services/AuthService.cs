@@ -62,6 +62,10 @@ namespace FortunaeLibraryManagementSystem.Service.Services
             return GenerateJwtToken(user.Username, user.Role, user.Id.ToString());
         }
 
+        public async Task<User> GetUserByIdAsync(Guid id)
+        {
+            return await _userRepository.GetUserByIdAsync(id);
+        }
 
         private string GenerateJwtToken(string username, string role, string userId)
         {

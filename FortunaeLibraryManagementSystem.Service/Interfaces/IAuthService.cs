@@ -1,5 +1,6 @@
 ﻿
 
+using FortunaeLibraryManagementSystem.Domain.Entities;
 using FortunaeLibraryManagementSystem.Service.DTOs;
 
 namespace FortunaeLibraryManagementSystem.Service.Interfaces
@@ -9,5 +10,6 @@ namespace FortunaeLibraryManagementSystem.Service.Interfaces
         Task<string> LoginAsync(string username, string password);
         Task<bool> RegisterAsync(RegisterDTO registerDto);
         Task<bool> DeleteUserAsync(Guid id);
+        Task<User> GetUserByIdAsync(Guid id);
     }
 }

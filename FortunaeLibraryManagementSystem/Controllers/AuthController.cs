@@ -60,5 +60,18 @@ namespace FortunaeLibraryManagementSystem.Controllers
                 return Unauthorized("Invalid credentials");
             }
         }
+        [HttpGet("user")]
+        public async Task<IActionResult> GetUser([FromQuery] Guid id)
+        {
+            try
+            {
+                var user = await _authService.GetUserByIdAsync(id);
+                return Ok(user);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Unauthorized("Invalid credentials");
+            }
+        }
     }
 }
