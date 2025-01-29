@@ -9,7 +9,6 @@ namespace FortunaeLibraryManagementSystem.Service.Services
     using System.Text.Json;
     using Microsoft.Extensions.Logging;
     using Microsoft.Extensions.Caching.Memory;
-    using FortunaeLibraryManagementSystem.Infrastructure.Migrations;
 
     public class BookService : IBookService
     {

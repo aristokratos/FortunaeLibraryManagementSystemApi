@@ -12,6 +12,7 @@ using Microsoft.Extensions.Caching.StackExchangeRedis;
 using Microsoft.Extensions.Configuration;
 using CloudinaryDotNet;
 
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -31,8 +32,15 @@ var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
 //        options.Configuration = redisConnection;
 //    });
 //}
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-builder.Services.AddDbContext<LibraryDbContext>(options => options.UseSqlServer(connectionString));
+var connectionString = builder.Configuration.GetConnectionString("DBConnection");
+//builder.Services.AddDbContext<LibraryDbContext>(options => options.UseSqlServer(connectionString, options =>
+//    options.EnableRetryOnFailure( errorNumbersToAdd: null)));
+builder.Services.AddDbContext<LibraryDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DBConnection")));
+
+//builder.Services.AddDataProtection()
+//    .PersistKeysToDbContext<LibraryDbContext>()
+//    .SetApplicationName("Faco.Api");
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IBookRepository, BookRepository>();
@@ -74,7 +82,7 @@ if (string.IsNullOrEmpty(secretKey))
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        options.RequireHttpsMetadata = false; // Set true in production
+        options.RequireHttpsMetadata = false; 
         options.SaveToken = true;
         options.TokenValidationParameters = new TokenValidationParameters
         {

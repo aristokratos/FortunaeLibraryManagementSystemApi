@@ -1,11 +1,7 @@
-﻿
-
-namespace FortunaeLibraryManagementSystem.Infrastructure.Data
+﻿namespace FortunaeLibraryManagementSystem.Infrastructure.Data
 {
     using FortunaeLibraryManagementSystem.Domain.Entities;
     using Microsoft.EntityFrameworkCore;
-
-
 
     public class LibraryDbContext : DbContext
     {
@@ -38,6 +34,7 @@ namespace FortunaeLibraryManagementSystem.Infrastructure.Data
                 .HasOne(r => r.Book)
                 .WithMany(b => b.Ratings)
                 .HasForeignKey(r => r.BookId);
+
             modelBuilder.Entity<Book>()
                 .Property(b => b.AverageRating)
                 .HasColumnType("decimal(5,2)");
@@ -51,13 +48,14 @@ namespace FortunaeLibraryManagementSystem.Infrastructure.Data
                 .Property(r => r.Value)
                 .IsRequired();
 
+            // ✅ Fix: Use double quotes instead of square brackets for PostgreSQL
             modelBuilder.Entity<Rating>()
-                .HasCheckConstraint("CHK_Rating_Value", "[Value] BETWEEN 1 AND 5");
+                .HasCheckConstraint("CHK_Rating_Value", "\"Value\" BETWEEN 1 AND 5");
 
+            // ✅ Fix: Use NOW() instead of GETDATE() for PostgreSQL
             modelBuilder.Entity<Rating>()
                 .Property(r => r.CreatedAt)
-                .HasDefaultValueSql("GETDATE()");
+                .HasDefaultValueSql("NOW()");
         }
     }
-
 }
