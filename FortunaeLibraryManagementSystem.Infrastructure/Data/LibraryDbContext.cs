@@ -48,14 +48,13 @@
                 .Property(r => r.Value)
                 .IsRequired();
 
-            // ✅ Fix: Use double quotes instead of square brackets for PostgreSQL
             modelBuilder.Entity<Rating>()
-                .HasCheckConstraint("CHK_Rating_Value", "\"Value\" BETWEEN 1 AND 5");
+                .HasCheckConstraint("CHK_Rating_Value", "Value BETWEEN 1 AND 5");
 
-            // ✅ Fix: Use NOW() instead of GETDATE() for PostgreSQL
             modelBuilder.Entity<Rating>()
                 .Property(r => r.CreatedAt)
-                .HasDefaultValueSql("NOW()");
+                .HasDefaultValueSql("GETDATE()");
         }
+
     }
 }

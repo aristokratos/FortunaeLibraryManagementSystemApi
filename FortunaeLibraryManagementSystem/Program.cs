@@ -8,39 +8,28 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Microsoft.OpenApi.Models;
-using Microsoft.Extensions.Caching.StackExchangeRedis;
-using Microsoft.Extensions.Configuration;
 using CloudinaryDotNet;
-
+using Microsoft.AspNetCore.Server.Kestrel.Core;
+using Microsoft.Extensions.Logging;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-Microsoft.IdentityModel.Logging.IdentityModelEventSource.ShowPII = true;
-var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
-//var redisConnection = Environment.GetEnvironmentVariable("REDIS_CONNECTION_STRING")
-//                      ?? builder.Configuration.GetConnectionString("Redis");
+// ======================== Configuration ========================
+// Logging (Critical for AWS troubleshooting)
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
+builder.Logging.AddDebug();
+builder.Logging.AddAWSProvider(); // For AWS CloudWatch integration
 
-//if (string.IsNullOrEmpty(redisConnection))
-//{
-//    builder.Services.AddDistributedMemoryCache();
-//}
-//else
-//{
-//    builder.Services.AddStackExchangeRedisCache(options =>
-//    {
-//        options.Configuration = redisConnection;
-//    });
-//}
-var connectionString = builder.Configuration.GetConnectionString("DBConnection");
-//builder.Services.AddDbContext<LibraryDbContext>(options => options.UseSqlServer(connectionString, options =>
-//    options.EnableRetryOnFailure( errorNumbersToAdd: null)));
+// ======================== Services Setup ========================
+// Database
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? throw new Exception("Database connection string is missing!");
 builder.Services.AddDbContext<LibraryDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DBConnection")));
+    options.UseSqlServer(connectionString, sqlOptions =>
+        sqlOptions.EnableRetryOnFailure(maxRetryCount: 5)));
 
-//builder.Services.AddDataProtection()
-//    .PersistKeysToDbContext<LibraryDbContext>()
-//    .SetApplicationName("Faco.Api");
+// Dependency Injection
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IBookRepository, BookRepository>();
@@ -49,41 +38,22 @@ builder.Services.AddScoped<IBorrowingService, BorrowingService>();
 builder.Services.AddScoped<IBorrowingRepository, BorrowingRepository>();
 builder.Services.AddScoped<IRatingRepository, RatingRepository>();
 builder.Services.AddScoped<IImageService, ImageService>();
-builder.Services.AddMemoryCache();
-builder.Services.AddCors();
 
+// Cloudinary
+var cloudinaryConfig = builder.Configuration.GetSection("Cloudinary");
+builder.Services.AddSingleton(new Cloudinary(new Account(
+    cloudinaryConfig["CloudName"],
+    cloudinaryConfig["ApiKey"],
+    cloudinaryConfig["ApiSecret"]
+)));
 
-
-
-var cloudinaryAccount = new Account(
-    builder.Configuration["Cloudinary:CloudName"],
-    builder.Configuration["Cloudinary:ApiKey"],
-    builder.Configuration["Cloudinary:ApiSecret"]
-);
-var cloudinary = new Cloudinary(cloudinaryAccount);
-
-builder.Services.AddSingleton(cloudinary);
-
-builder.Services.AddControllers();
-
-var jwtKey = builder.Configuration["JwtSettings:SecretKey"];
-var jwtIssuer = builder.Configuration["JwtSettings:Issuer"];
-var jwtAudience = builder.Configuration["JwtSettings:Audience"];
-
+// JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
-var secretKey = jwtSettings["SecretKey"];
-
-if (string.IsNullOrEmpty(secretKey))
-{
-
-    throw new Exception("JWT SecretKey is missing!");
-}
+var secretKey = Encoding.UTF8.GetBytes(jwtSettings["SecretKey"]
+    ?? throw new Exception("JWT SecretKey is missing!"));
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        options.RequireHttpsMetadata = false; 
-        options.SaveToken = true;
+    .AddJwtBearer(options => {
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
@@ -92,65 +62,65 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateIssuerSigningKey = true,
             ValidIssuer = jwtSettings["Issuer"],
             ValidAudience = jwtSettings["Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
-            RoleClaimType = "http://schemas.microsoft.com/ws/2008/06/identity/claims/role"
+            IssuerSigningKey = new SymmetricSecurityKey(secretKey)
         };
     });
 
-Console.WriteLine($"Secret Key: {jwtSettings["SecretKey"]}");
-
-
+// Swagger
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(options =>
-{
-    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
-    {
-        Name = "Authorization",
-        Type = SecuritySchemeType.Http,
-        Scheme = "bearer",
-        BearerFormat = "JWT",
-        In = ParameterLocation.Header,
-        Description = "JWT Authorization header using the Bearer scheme. Example: 'Bearer {token}'"
-    });
-
-    options.AddSecurityRequirement(new OpenApiSecurityRequirement
-    {
-        {
-            new OpenApiSecurityScheme
-            {
-                Reference = new OpenApiReference
-                {
-                    Type = ReferenceType.SecurityScheme,
-                    Id = "Bearer"
-                }
-            },
-            new string[] {}
-        }
-    });
+builder.Services.AddSwaggerGen(c => {
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "Library API", Version = "v1" });
 });
 
+// ======================== AWS-Specific Configuration ========================
+// Kestrel configuration for AWS
+builder.WebHost.ConfigureKestrel(serverOptions => {
+    serverOptions.Limits.MaxRequestBodySize = 52428800; // 50MB file uploads
+});
+
+// ======================== App Build ========================
 var app = builder.Build();
 
-
-    app.UseSwagger();
-    app.UseSwaggerUI();
-
+// ======================== Middleware Pipeline ========================
+// Development vs Production settings
 if (app.Environment.IsDevelopment())
 {
     app.UseDeveloperExceptionPage();
+    app.UseSwagger();
+    app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "Library API v1"));
+}
+else
+{
+    app.UseExceptionHandler("/error");
+    app.UseHsts(); // Strict HTTPS for production
 }
 
-app.UseCors(builder => builder
+// CORS Policy
+app.UseCors(policy => policy
     .AllowAnyOrigin()
     .AllowAnyMethod()
-    .AllowAnyHeader()
-);
-app.UseHttpsRedirection();
-app.UseRouting();
+    .AllowAnyHeader());
 
+// Routing & Auth
+app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
 
+// Endpoints
 app.MapControllers();
 
-app.Run();
+// AWS Health Check (Must return 200 OK)
+app.MapGet("/health", () => {
+    app.Logger.LogInformation("Health check endpoint hit");
+    return Results.Ok(new
+    {
+        status = "Healthy",
+        timestamp = DateTime.UtcNow
+    });
+});
+
+// ======================== Server Configuration ========================
+// AWS Elastic Beanstalk uses PORT environment variable
+var port = Environment.GetEnvironmentVariable("PORT") ?? "5000";
+app.Logger.LogInformation($"Starting application on port {port}");
+app.Run($"http://0.0.0.0:{port}");

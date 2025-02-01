@@ -1,0 +1,45 @@
+name: Deploy ASP.NET Core API to AWS Elastic Beanstalk
+
+on:
+  push:
+    branches:
+      - main  # Runs when code is pushed to the main branch
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup .NET Core SDK
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: '*8.0' # Change to your .NET version
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Build project
+      run: dotnet build --configuration Release --no-restore
+
+    - name: Run tests
+      run: dotnet test --configuration Release --no-restore --verbosity normal
+
+    - name: Publish the application
+      run: dotnet publish -c Release -o ./publish
+
+    - name: Package application as ZIP
+      run: zip -r deploy.zip ./publish/*
+
+    - name: Deploy to AWS Elastic Beanstalk
+      uses: einaregilsson/beanstalk-deploy@v22
+      with:
+        aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        application_name: "fortunaelibrary-api" # Change to your Elastic Beanstalk application name
+        environment_name: "Development" # Change to your Elastic Beanstalk environment name
+        version_label: "deploy-${{ github.run_id }}"
+        region: "us-east-1" # Change to your AWS region
+        deployment_package: "deploy.zip"
