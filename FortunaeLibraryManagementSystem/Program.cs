@@ -1,4 +1,4 @@
-using FortunaeLibraryManagementSystem.Infrastructure.Data;
+﻿using FortunaeLibraryManagementSystem.Infrastructure.Data;
 using FortunaeLibraryManagementSystem.Infrastructure.Interfaces;
 using FortunaeLibraryManagementSystem.Service.Interfaces;
 using FortunaeLibraryManagementSystem.Service.Services;
@@ -8,28 +8,40 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Microsoft.OpenApi.Models;
+using Microsoft.Extensions.Caching.StackExchangeRedis;
+using Microsoft.Extensions.Configuration;
 using CloudinaryDotNet;
-using Microsoft.AspNetCore.Server.Kestrel.Core;
-using Microsoft.Extensions.Logging;
+using AspNetCoreRateLimit;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ======================== Configuration ========================
-// Logging (Critical for AWS troubleshooting)
+// Enable logging (Important for AWS debugging)
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
-builder.Logging.AddDebug();
-builder.Logging.AddAWSProvider(); // For AWS CloudWatch integration
 
-// ======================== Services Setup ========================
-// Database
+// Set up database connection
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new Exception("Database connection string is missing!");
 builder.Services.AddDbContext<LibraryDbContext>(options =>
     options.UseSqlServer(connectionString, sqlOptions =>
-        sqlOptions.EnableRetryOnFailure(maxRetryCount: 5)));
+        sqlOptions.EnableRetryOnFailure()));
 
-// Dependency Injection
+// Redis Configuration (Use Redis if available, otherwise fallback to in-memory cache)
+//var redisConnection = builder.Configuration.GetConnectionString("Redis");
+//if (!string.IsNullOrEmpty(redisConnection))
+//{
+//    builder.Services.AddStackExchangeRedisCache(options =>
+//    {
+//        options.Configuration = redisConnection;
+//    });
+//}
+//else
+//{
+    builder.Services.AddMemoryCache();
+//}
+
+// Dependency Injection for Services & Repositories
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IBookRepository, BookRepository>();
@@ -38,22 +50,39 @@ builder.Services.AddScoped<IBorrowingService, BorrowingService>();
 builder.Services.AddScoped<IBorrowingRepository, BorrowingRepository>();
 builder.Services.AddScoped<IRatingRepository, RatingRepository>();
 builder.Services.AddScoped<IImageService, ImageService>();
+builder.Services.AddHealthChecks();
+builder.Services.AddInMemoryRateLimiting();
+builder.Services.AddMemoryCache();
+builder.Services.Configure<IpRateLimitOptions>(builder.Configuration.GetSection("IpRateLimiting"));
+builder.Services.Configure<IpRateLimitPolicies>(builder.Configuration.GetSection("IpRateLimitPolicies"));
+builder.Services.AddSingleton<IRateLimitConfiguration, RateLimitConfiguration>();
+builder.Services.AddSingleton<IIpPolicyStore, MemoryCacheIpPolicyStore>();
+builder.Services.AddSingleton<IRateLimitCounterStore, MemoryCacheRateLimitCounterStore>();
 
-// Cloudinary
-var cloudinaryConfig = builder.Configuration.GetSection("Cloudinary");
-builder.Services.AddSingleton(new Cloudinary(new Account(
-    cloudinaryConfig["CloudName"],
-    cloudinaryConfig["ApiKey"],
-    cloudinaryConfig["ApiSecret"]
-)));
+// Cloudinary Configuration
+var cloudinaryAccount = new Account(
+    builder.Configuration["Cloudinary:CloudName"],
+    builder.Configuration["Cloudinary:ApiKey"],
+    builder.Configuration["Cloudinary:ApiSecret"]
+);
+builder.Services.AddSingleton(new Cloudinary(cloudinaryAccount));
 
-// JWT Authentication
+builder.Services.AddControllers();
+
+// JWT Authentication Setup
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
-var secretKey = Encoding.UTF8.GetBytes(jwtSettings["SecretKey"]
-    ?? throw new Exception("JWT SecretKey is missing!"));
+var secretKey = jwtSettings["SecretKey"];
+if (string.IsNullOrEmpty(secretKey))
+{
+    Console.WriteLine("⚠️ JWT SecretKey is missing! Check AWS environment variables.");
+    throw new Exception("JWT SecretKey is missing!");
+}
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options => {
+    .AddJwtBearer(options =>
+    {
+        options.RequireHttpsMetadata = false;
+        options.SaveToken = true;
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
@@ -62,65 +91,75 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateIssuerSigningKey = true,
             ValidIssuer = jwtSettings["Issuer"],
             ValidAudience = jwtSettings["Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(secretKey)
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey))
         };
     });
 
-// Swagger
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(c => {
-    c.SwaggerDoc("v1", new OpenApiInfo { Title = "Library API", Version = "v1" });
+builder.Services.AddSwaggerGen(options =>
+{
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "JWT Authorization header using the Bearer scheme."
+    });
+
+    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            new string[] {}
+        }
+    });
 });
 
-// ======================== AWS-Specific Configuration ========================
-// Kestrel configuration for AWS
-builder.WebHost.ConfigureKestrel(serverOptions => {
-    serverOptions.Limits.MaxRequestBodySize = 52428800; // 50MB file uploads
+// Kestrel Configuration for AWS Load Balancer
+var port = Environment.GetEnvironmentVariable("PORT") ?? "5000";
+builder.WebHost.ConfigureKestrel(serverOptions =>
+{
+    serverOptions.ListenAnyIP(int.Parse(port));
 });
 
-// ======================== App Build ========================
+// Build Application BEFORE Using Services
 var app = builder.Build();
 
-// ======================== Middleware Pipeline ========================
-// Development vs Production settings
-if (app.Environment.IsDevelopment())
-{
-    app.UseDeveloperExceptionPage();
+// Configure Middleware
+
+    //app.UseDeveloperExceptionPage();
     app.UseSwagger();
-    app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "Library API v1"));
-}
-else
-{
-    app.UseExceptionHandler("/error");
-    app.UseHsts(); // Strict HTTPS for production
-}
+    app.UseSwaggerUI();
+    //app.ApplyMigrations();
 
-// CORS Policy
+
+// CORS Configuration for AWS
 app.UseCors(policy => policy
-    .AllowAnyOrigin()
+    .SetIsOriginAllowed(_ => true)
     .AllowAnyMethod()
-    .AllowAnyHeader());
+    .AllowAnyHeader()
+);
 
-// Routing & Auth
+
+app.UseHttpsRedirection();
+app.UseIpRateLimiting();
+app.MapHealthChecks("/health");
+// Enable Authentication & Authorization
 app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Endpoints
+// API Controllers
 app.MapControllers();
 
-// AWS Health Check (Must return 200 OK)
-app.MapGet("/health", () => {
-    app.Logger.LogInformation("Health check endpoint hit");
-    return Results.Ok(new
-    {
-        status = "Healthy",
-        timestamp = DateTime.UtcNow
-    });
-});
-
-// ======================== Server Configuration ========================
-// AWS Elastic Beanstalk uses PORT environment variable
-var port = Environment.GetEnvironmentVariable("PORT") ?? "5000";
-app.Logger.LogInformation($"Starting application on port {port}");
-app.Run($"http://0.0.0.0:{port}");
+// Start Application
+app.Run();
