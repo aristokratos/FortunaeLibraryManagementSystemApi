@@ -7,6 +7,7 @@ using FortunaeLibraryManagementSystem.Domain.Entities;
 using System;
 using FortunaeLibraryManagementSystem.Infrastructure.Repositories;
 using System.Threading.Tasks;
+using FortunaeLibraryManagementSystem.Domain.Constants;
 
 namespace FortunaeLibraryManagementSystem.Service.Services
 {
@@ -27,18 +28,18 @@ namespace FortunaeLibraryManagementSystem.Service.Services
         {
             if (bookId == Guid.Empty)
             {
-                throw new ArgumentNullException(nameof(bookId), "The borrow book data cannot be null.");
+                throw new ArgumentNullException(nameof(bookId), Message.BookDataCannotBeNull);
             }
 
             var book = await _bookRepository.GetBookByIdAsync(bookId);
             if (book == null)
             {
-                throw new InvalidOperationException("The requested book does not exist.");
+                throw new InvalidOperationException(Message.BookDoesNotExist);
             }
 
             if (!book.IsAvailable)
             {
-                throw new InvalidOperationException("The requested book is not available for borrowing.");
+                throw new InvalidOperationException(Message.BookNotAvailable);
             }
 
             var activeBorrowings = await _borrowingRepository.GetActiveBorrowingsByUserAsync(userId);
@@ -49,7 +50,7 @@ namespace FortunaeLibraryManagementSystem.Service.Services
 
             if (activeBorrowings.Count >= 3)
             {
-                throw new InvalidOperationException("Members can only borrow up to 3 books at a time.");
+                throw new InvalidOperationException(Message.BorrowLimimit);
             }
 
             int borrowingDays = 14;
@@ -95,13 +96,11 @@ namespace FortunaeLibraryManagementSystem.Service.Services
             var overdueBorrowings = await GetOverdueBorrowingsAsync();
             foreach (var borrowing in overdueBorrowings)
             {
-                // Example penalty: $1 per day overdue
                 var daysOverdue = (DateTime.UtcNow - borrowing.ExpectedReturnDate.Value).Days;
                 decimal penalty = daysOverdue * 1.0m;
 
                 borrowing.Penalty = penalty;
 
-                // Update the borrowing record
                 var borrowingEntity = await _borrowingRepository.GetBorrowingByIdAsync(borrowing.Id);
                 borrowingEntity.Penalty = penalty;
 
@@ -127,7 +126,7 @@ namespace FortunaeLibraryManagementSystem.Service.Services
         {
             var borrowing = await _borrowingRepository.GetBorrowingByIdAsync(borrowingId);
             if (borrowing == null)
-                throw new KeyNotFoundException("Borrowing record not found.");
+                throw new KeyNotFoundException(Message.BorrowingRecordNotFound);
 
             borrowing.ReturnedAt = DateTime.UtcNow;
 
@@ -193,7 +192,6 @@ namespace FortunaeLibraryManagementSystem.Service.Services
 
             if (borrowings == null)
             {
-                // Log or handle the null case
                 return new List<BorrowingDTO>();
             }
 
@@ -208,7 +206,7 @@ namespace FortunaeLibraryManagementSystem.Service.Services
         {
             var borrowing = await _borrowingRepository.GetBorrowingByIdAsync(borrowingId);
             if (borrowing == null)
-                throw new KeyNotFoundException("Borrowing record not found.");
+                throw new KeyNotFoundException(Message.BorrowingRecordNotFound);
 
             borrowing.Penalty = penalty;
 
@@ -219,7 +217,7 @@ namespace FortunaeLibraryManagementSystem.Service.Services
         {
             var borrowing = await _borrowingRepository.GetBorrowingByIdAsync(borrowingId);
             if (borrowing == null)
-                throw new KeyNotFoundException("Borrowing record not found.");
+                throw new KeyNotFoundException(Message.BorrowingRecordNotFound);
 
             borrowing.ReturnedAt = DateTime.UtcNow;
             borrowing.IsOverdue = false;

@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace FortunaeLibraryManagementSystem.Infrastructure.Migrations
 {
     [DbContext(typeof(LibraryDbContext))]
-    [Migration("20250201053337_InitialMigration")]
+    [Migration("20250203184902_InitialMigration")]
     partial class InitialMigration
     {
         /// <inheritdoc />
@@ -116,7 +116,7 @@ namespace FortunaeLibraryManagementSystem.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("datetime2")
-                        .HasDefaultValueSql("NOW()");
+                        .HasDefaultValueSql("GETDATE()");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uniqueidentifier");
@@ -132,7 +132,7 @@ namespace FortunaeLibraryManagementSystem.Infrastructure.Migrations
 
                     b.ToTable("Ratings", t =>
                         {
-                            t.HasCheckConstraint("CHK_Rating_Value", "\"Value\" BETWEEN 1 AND 5");
+                            t.HasCheckConstraint("CHK_Rating_Value", "Value BETWEEN 1 AND 5");
                         });
                 });
 

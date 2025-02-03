@@ -9,6 +9,7 @@ namespace FortunaeLibraryManagementSystem.Service.Services
     using System.Text.Json;
     using Microsoft.Extensions.Logging;
     using Microsoft.Extensions.Caching.Memory;
+    using FortunaeLibraryManagementSystem.Service.Services.CacheService;
 
     public class BookService : IBookService
     {
@@ -16,15 +17,18 @@ namespace FortunaeLibraryManagementSystem.Service.Services
         private readonly IRatingRepository _ratingRepository;
         private readonly ILogger<BookService> _logger;
         private readonly IImageService _imageService;
-        private readonly IMemoryCache _memoryCache;
+       // private readonly IMemoryCache _memoryCache;
+        private readonly IRedisService _cache;
+        private const int CACHE_DURATION_MINUTES = 10;
 
-        public BookService(IBookRepository bookRepository, ILogger<BookService> logger, IImageService imageService, IMemoryCache memoryCache, IRatingRepository ratingRepository)
+        public BookService(IBookRepository bookRepository, ILogger<BookService> logger, IImageService imageService, IRedisService cache, IRatingRepository ratingRepository)
         {
             _bookRepository = bookRepository;
             _logger = logger;
             _imageService = imageService;
-            _memoryCache = memoryCache;
+            //_memoryCache = memoryCache;
             _ratingRepository = ratingRepository;
+            _cache = cache;
         }
 
         public async Task<BookDTO> AddBookAsync(CreateBookDTO createBookDto)
@@ -82,87 +86,71 @@ namespace FortunaeLibraryManagementSystem.Service.Services
 
             await _bookRepository.UpdateBookAsync(book);
 
-            _memoryCache.Remove("AllBooks");
-            _memoryCache.Remove("AvailableBooks");
+            await InvalidateBookCaches(id);
 
             return MapToBookDTO(book);
         }
 
-        public async Task DeleteBookAsync(Guid id)
-        {
-            var book = await _bookRepository.GetBookByIdAsync(id);
-            if (book == null)
-                throw new KeyNotFoundException("Book not found");
-
-            await _bookRepository.DeleteBookAsync(book);
-
-            _memoryCache.Remove("AllBooks");
-            _memoryCache.Remove("AvailableBooks");
-        }
 
         public async Task<BookDTO> GetBooksByIdAsync(Guid bookId)
         {
-            if (!_memoryCache.TryGetValue($"Book_{bookId}", out BookDTO cachedBook))
-            {
-                var book = await _bookRepository.GetBookByIdAsync(bookId);
-                if (book == null)
-                {
-                    throw new KeyNotFoundException($"Book with ID {bookId} not found.");
-                }
+            string cacheKey = $"Book_{bookId}";
 
-                cachedBook = MapToBookDTO(book);
+            var cachedBook = await _cache.GetAsync<BookDTO>(cacheKey);
+            if (cachedBook != null)
+                return cachedBook;
 
-                var cacheOptions = new MemoryCacheEntryOptions
-                {
-                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10)
-                };
-                _memoryCache.Set($"Book_{bookId}", cachedBook, cacheOptions);
-            }
+            var book = await _bookRepository.GetBookByIdAsync(bookId);
+            if (book == null)
+                throw new KeyNotFoundException($"Book with ID {bookId} not found.");
 
-            return cachedBook;
+            var bookDto = MapToBookDTO(book);
+            await _cache.SetAsync(cacheKey, bookDto, TimeSpan.FromMinutes(CACHE_DURATION_MINUTES));
+
+            return bookDto;
         }
+
 
 
         public async Task<List<BookDTO>> GetAllBooksAsync(bool includeUnavailable = false)
         {
-            if (!_memoryCache.TryGetValue("AllBooks", out List<BookDTO> cachedBooks))
-            {
-                var books = await _bookRepository.GetBooksAsync(null, null, 1, 10);
-                cachedBooks = books.Select(MapToBookDTO).ToList();
+            string cacheKey = "AllBooks";
 
-                var cacheOptions = new MemoryCacheEntryOptions
-                {
-                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10)
-                };
-                _memoryCache.Set("AllBooks", cachedBooks, cacheOptions);
-            }
+            var cachedBooks = await _cache.GetAsync<List<BookDTO>>(cacheKey);
+            if (cachedBooks != null)
+                return includeUnavailable ? cachedBooks : cachedBooks.Where(b => b.IsAvailable).ToList();
 
-            return includeUnavailable
-                ? cachedBooks
-                : cachedBooks.Where(b => b.IsAvailable).ToList();
+            var booksList = await _bookRepository.GetBooksAsync(null, null, 1, 10);
+            var bookDtos = booksList.Select(MapToBookDTO).ToList();
+
+            await _cache.SetAsync(cacheKey, bookDtos, TimeSpan.FromMinutes(CACHE_DURATION_MINUTES));
+
+            return includeUnavailable ? bookDtos : bookDtos.Where(b => b.IsAvailable).ToList();
         }
 
         public async Task<List<BookDTO>> GetAvailableBooksAsync(string? filter = null)
         {
-            if (!_memoryCache.TryGetValue("AvailableBooks", out List<BookDTO> cachedBooks))
+            string cacheKey = "AvailableBooks";
+
+            var cachedBooks = await _cache.GetAsync<List<BookDTO>>(cacheKey);
+            if (cachedBooks != null)
             {
-                var books = await _bookRepository.GetBooksAsync(null, null, 1, 10);
-                books = books.Where(b => b.IsAvailable).ToList();
-
-                cachedBooks = books.Select(MapToBookDTO).ToList();
-
-                var cacheOptions = new MemoryCacheEntryOptions
-                {
-                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10)
-                };
-                _memoryCache.Set("AvailableBooks", cachedBooks, cacheOptions);
+                return !string.IsNullOrWhiteSpace(filter)
+                    ? cachedBooks.Where(b => b.Title.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                                           b.Author.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                                           b.Genre.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList()
+                    : cachedBooks;
             }
 
+            var books = await _bookRepository.GetBooksAsync(null, null, 1, 10);
+            var bookDtos = books.Where(b => b.IsAvailable).Select(MapToBookDTO).ToList();
+
+            await _cache.SetAsync(cacheKey, bookDtos, TimeSpan.FromMinutes(CACHE_DURATION_MINUTES));
             return !string.IsNullOrWhiteSpace(filter)
-                ? cachedBooks.Where(b => b.Title.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
-                                         b.Author.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
-                                         b.Genre.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList()
-                : cachedBooks;
+                ? bookDtos.Where(b => b.Title.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                                    b.Author.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                                    b.Genre.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList()
+                : bookDtos;
         }
         public async Task AddRatingAsync(Guid bookId, Guid userId, int value, string? comment = null)
         {
@@ -209,19 +197,18 @@ namespace FortunaeLibraryManagementSystem.Service.Services
         }
         public async Task<List<BookDTO>> GetCachedTopRatedBooksAsync()
         {
-            if (!_memoryCache.TryGetValue("TopRatedBooks", out List<BookDTO> cachedBooks))
-            {
-                var books = await GetTopRatedBooksAsync();
-                var cacheOptions = new MemoryCacheEntryOptions
-                {
-                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(15)
-                };
-                _memoryCache.Set("TopRatedBooks", books, cacheOptions);
-                return books;
-            }
+            string cacheKey = "TopRatedBooks";
 
-            return cachedBooks;
+            var cachedBooks = await _cache.GetAsync<List<BookDTO>>(cacheKey);
+            if (cachedBooks != null)
+                return cachedBooks;
+
+            var books = await GetTopRatedBooksAsync();
+            await _cache.SetAsync(cacheKey, books, TimeSpan.FromMinutes(15));
+
+            return books;
         }
+
         public async Task<List<BookDTO>> SearchBooksAsync(string? title = null, string? author = null, string? genre = null, bool? isAvailable = null)
         {
             var books = await _bookRepository.GetBooksAsync(null, null, 1, 100);
@@ -275,8 +262,39 @@ namespace FortunaeLibraryManagementSystem.Service.Services
             }).ToList();
         }
 
+        public async Task<bool> DeleteBookAsync(Guid bookId)
+        {
+            var book = await _bookRepository.GetBookByIdAsync(bookId);
+            if (book == null)
+            {
+                _logger.LogWarning($"Book with ID {bookId} not found.");
+                return false;
+            }
+
+            await _bookRepository.DeleteBookAsync(book);
+            await InvalidateBookCaches(bookId);
+
+            _logger.LogInformation($"Book with ID {bookId} deleted and cache invalidated.");
+            return true;
+        }
 
 
+
+        private async Task InvalidateBookCaches(Guid bookId)
+        {
+            var cacheKeys = new[]
+            {
+                "AllBooks",
+                "AvailableBooks",
+                "TopRatedBooks",
+                $"Book_{bookId}"
+            };
+
+            foreach (var key in cacheKeys)
+            {
+                await _cache.RemoveAsync(key);
+            }
+        }
         private BookDTO MapToBookDTO(Book book)
         {
             return new BookDTO

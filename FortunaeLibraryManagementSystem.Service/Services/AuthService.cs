@@ -2,6 +2,7 @@
 using FortunaeLibraryManagementSystem.Infrastructure.Interfaces;
 using FortunaeLibraryManagementSystem.Service.DTOs;
 using FortunaeLibraryManagementSystem.Service.Interfaces;
+using FortunaeLibraryManagementSystem.Domain.Constants;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
@@ -32,7 +33,7 @@ namespace FortunaeLibraryManagementSystem.Service.Services
         {
             var existingUser = await _userRepository.GetUserByUsernameAsync(registerDto.Username);
             if (existingUser != null)
-                throw new InvalidOperationException("Username already exists");
+                throw new InvalidOperationException(Message.UserNameAlreadyExists);
 
             var passwordHash = HashPassword(registerDto.Password);
 
@@ -54,10 +55,10 @@ namespace FortunaeLibraryManagementSystem.Service.Services
             var user = await _userRepository.GetUserByUsernameAsync(username);
 
             if (user == null)
-                throw new UnauthorizedAccessException("Invalid credentials");
+                throw new UnauthorizedAccessException(Message.InvalidCredentials);
 
             if (!VerifyPassword(password, user.PasswordHash))
-                throw new UnauthorizedAccessException("Invalid credentials");
+                throw new UnauthorizedAccessException(Message.InvalidCredentials);
 
             return GenerateJwtToken(user.Username, user.Role, user.Id.ToString());
         }
@@ -104,7 +105,7 @@ namespace FortunaeLibraryManagementSystem.Service.Services
         {
             var user = await _userRepository.GetUserByIdAsync(id);
             if (user == null)
-                throw new KeyNotFoundException("User not found");
+                throw new KeyNotFoundException(Message.UserNotFound);
 
             await _userRepository.DeleteUserAsync(user);
 

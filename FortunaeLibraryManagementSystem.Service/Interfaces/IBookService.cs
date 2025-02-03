@@ -8,7 +8,7 @@ namespace FortunaeLibraryManagementSystem.Service.Interfaces
     {
         Task<BookDTO> AddBookAsync(CreateBookDTO createBookDto);
         Task<BookDTO> UpdateBookAsync(Guid id, UpdateBookDTO updateBookDto);
-        Task DeleteBookAsync(Guid id);
+        Task<bool> DeleteBookAsync(Guid id);
         Task<List<BookDTO>> GetAllBooksAsync(bool includeUnavailable = false); 
         Task<List<BookDTO>> GetAvailableBooksAsync(string? filter = null);
         Task<BookDTO> GetBooksByIdAsync(Guid bookId);

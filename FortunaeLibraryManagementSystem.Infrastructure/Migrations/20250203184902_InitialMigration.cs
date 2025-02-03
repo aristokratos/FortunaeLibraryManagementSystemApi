@@ -84,12 +84,12 @@ namespace FortunaeLibraryManagementSystem.Infrastructure.Migrations
                     UserId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     Value = table.Column<int>(type: "int", nullable: false),
                     Comment = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false, defaultValueSql: "NOW()")
+                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false, defaultValueSql: "GETDATE()")
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Ratings", x => x.Id);
-                    table.CheckConstraint("CHK_Rating_Value", "\"Value\" BETWEEN 1 AND 5");
+                    table.CheckConstraint("CHK_Rating_Value", "Value BETWEEN 1 AND 5");
                     table.ForeignKey(
                         name: "FK_Ratings_Books_BookId",
                         column: x => x.BookId,
