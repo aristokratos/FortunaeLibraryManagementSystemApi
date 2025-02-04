@@ -25,7 +25,7 @@ namespace FortunaeLibraryManagementSystem.Controllers
         /// </summary>
         /// <param name="createBookDto">The book details.</param>
         /// <returns>The created book with its ID.</returns>
-        [HttpPost]
+        [HttpPost("AddBook")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> AddBook([FromForm] CreateBookDTO createBookDto)
         {

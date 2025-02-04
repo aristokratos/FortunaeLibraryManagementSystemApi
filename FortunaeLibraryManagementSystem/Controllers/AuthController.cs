@@ -1,5 +1,6 @@
 ﻿using FortunaeLibraryManagementSystem.Service.DTOs;
 using FortunaeLibraryManagementSystem.Service.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
@@ -29,6 +30,13 @@ namespace FortunaeLibraryManagementSystem.Controllers
             {
                 return BadRequest(ex.Message);
             }
+        }
+        [HttpGet("test-auth")]
+        [Authorize]
+        public IActionResult TestAuth()
+        {
+            var headers = HttpContext.Request.Headers;
+            return Ok(new { AuthorizationHeader = headers["Authorization"].ToString() });
         }
 
         [HttpPost("login")]

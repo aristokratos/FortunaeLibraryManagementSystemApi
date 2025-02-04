@@ -3,6 +3,8 @@ using FortunaeLibraryManagementSystem.Infrastructure.Interfaces;
 using FortunaeLibraryManagementSystem.Service.Interfaces;
 using FortunaeLibraryManagementSystem.Service.Services;
 using FortunaeLibraryManagementSystem.Infrastructure.Repositories;
+using FortunaeLibraryManagementSystem.Middleware;
+using FortunaeLibraryManagementSystem.Service.Services.CacheService;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -11,8 +13,6 @@ using Microsoft.OpenApi.Models;
 using CloudinaryDotNet;
 using AspNetCoreRateLimit;
 using Amazon.S3;
-using FortunaeLibraryManagementSystem.Service.Services.CacheService;
-using FortunaeLibraryManagementSystem.Middleware;
 using StackExchange.Redis;
 using DotNetEnv;
 using static FortunaeLibraryManagementSystem.AppSettings;
@@ -21,11 +21,86 @@ Env.Load();
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Enable logging (Important for AWS debugging)
+// Enable logging
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 
+// Configuration Settings
+var jwtIssuer = Environment.GetEnvironmentVariable("JWT_ISSUER")
+    ?? throw new Exception("JWT_ISSUER is missing!");
+var jwtAudience = Environment.GetEnvironmentVariable("JWT_AUDIENCE")
+    ?? throw new Exception("JWT_AUDIENCE is missing!");
+var jwtSecretKey = Environment.GetEnvironmentVariable("JWT_SECRET_KEY")
+    ?? throw new Exception("JWT_SECRET_KEY is missing!");
+var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION")
+    ?? throw new Exception("DB_CONNECTION is missing!");
+var redisConnection = Environment.GetEnvironmentVariable("REDIS_CONNECTION")
+    ?? throw new Exception("REDIS_CONNECTION is missing!");
 
+// Database Configuration
+builder.Services.AddDbContext<LibraryDbContext>(options =>
+    options.UseSqlServer(connectionString, sqlOptions =>
+        sqlOptions.EnableRetryOnFailure()));
+
+// Redis Configuration
+var redisOptions = ConfigurationOptions.Parse(redisConnection);
+redisOptions.ConnectRetry = 5;
+redisOptions.ConnectTimeout = 5000;
+redisOptions.AbortOnConnectFail = false;
+redisOptions.SyncTimeout = 5000;
+
+builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
+    ConnectionMultiplexer.Connect(redisOptions));
+
+builder.Services.AddStackExchangeRedisCache(options =>
+{
+    options.Configuration = redisConnection;
+    options.InstanceName = "FortunaeCache:";
+});
+
+// JWT Authentication
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.RequireHttpsMetadata = false;
+    options.SaveToken = true;
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = jwtIssuer,
+        ValidAudience = jwtAudience,
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecretKey)),
+        ClockSkew = TimeSpan.Zero
+    };
+    options.Events = new JwtBearerEvents
+    {
+        OnAuthenticationFailed = context =>
+        {
+            Console.WriteLine($"Authentication failed: {context.Exception.Message}");
+            return Task.CompletedTask;
+        },
+        OnTokenValidated = context =>
+        {
+            Console.WriteLine("Token validated successfully");
+            return Task.CompletedTask;
+        },
+        OnMessageReceived = context =>
+        {
+            Console.WriteLine($"Received token: {context.Token}");
+            return Task.CompletedTask;
+        }
+    };
+});
+
+// Service Configuration
 builder.Services.Configure<AWSSettings>(options =>
 {
     options.AccessKeyId = Environment.GetEnvironmentVariable("AWS_ACCESS_KEY_ID");
@@ -34,15 +109,6 @@ builder.Services.Configure<AWSSettings>(options =>
     options.Region = Environment.GetEnvironmentVariable("AWS_REGION");
 });
 
-// Configure Redis
-var redisConnection = Environment.GetEnvironmentVariable("REDIS_CONNECTION");
-builder.Services.AddStackExchangeRedisCache(options =>
-{
-    options.Configuration = redisConnection;
-    options.InstanceName = "FortunaeCache:";
-});
-
-// Configure Cloudinary
 builder.Services.Configure<CloudinarySettings>(options =>
 {
     options.CloudName = Environment.GetEnvironmentVariable("CLOUDINARY_CLOUD_NAME");
@@ -50,54 +116,16 @@ builder.Services.Configure<CloudinarySettings>(options =>
     options.ApiSecret = Environment.GetEnvironmentVariable("CLOUDINARY_API_SECRET");
 });
 
-// Configure JWT
 builder.Services.Configure<JwtSettings>(options =>
 {
-    options.Issuer = Environment.GetEnvironmentVariable("JWT_ISSUER");
-    options.Audience = Environment.GetEnvironmentVariable("JWT_AUDIENCE");
+    options.Issuer = jwtIssuer;
+    options.Audience = jwtAudience;
+    options.SecretKey = jwtSecretKey;
     options.ExpirationTime = int.Parse(Environment.GetEnvironmentVariable("JWT_EXPIRATION") ?? "30");
-    options.SecretKey = Environment.GetEnvironmentVariable("JWT_SECRET_KEY");
 });
 
-// Configure DB Connection
-builder.Services.Configure<DatabaseSettings>(options =>
-{
-    options.ConnectionString = Environment.GetEnvironmentVariable("DB_CONNECTION");
-});
-
-// Configure Database
-//builder.Services.AddDbContext<ApplicationDbContext>(options =>
-//    options.UseSqlServer(Environment.GetEnvironmentVariable("DB_CONNECTION")));
-// Set up database connection
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? throw new Exception("Database connection string is missing!");
-builder.Services.AddDbContext<LibraryDbContext>(options =>
-    options.UseSqlServer(connectionString, sqlOptions =>
-        sqlOptions.EnableRetryOnFailure()));
-
-//// Redis Configuration (Use Redis if available, otherwise fallback to in-memory cache)
-//var redisConnection = builder.Configuration.GetConnectionString("Redis");
-var redisOptions = ConfigurationOptions.Parse(redisConnection!);
-redisOptions.ConnectRetry = 5;
-redisOptions.ConnectTimeout = 5000;
-redisOptions.AbortOnConnectFail = false;
-redisOptions.SyncTimeout = 5000;
-
-//// Register IConnectionMultiplexer as singleton
-builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
-    ConnectionMultiplexer.Connect(redisOptions));
-
-// Register IDistributedCache
-//builder.Services.AddStackExchangeRedisCache(options =>
-//{
-//    options.ConfigurationOptions = redisOptions;
-//    options.InstanceName = "FortunaeCache:";
-//});
-
-// Register Redis Service
+// Dependency Injection
 builder.Services.AddScoped<IRedisService, RedisService>();
-
-// Dependency Injection for Services & Repositories
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IBookRepository, BookRepository>();
@@ -106,7 +134,8 @@ builder.Services.AddScoped<IBorrowingService, BorrowingService>();
 builder.Services.AddScoped<IBorrowingRepository, BorrowingRepository>();
 builder.Services.AddScoped<IRatingRepository, RatingRepository>();
 builder.Services.AddScoped<IImageService, ImageService>();
-builder.Services.AddHealthChecks();
+
+// Rate Limiting
 builder.Services.AddInMemoryRateLimiting();
 builder.Services.AddMemoryCache();
 builder.Services.Configure<IpRateLimitOptions>(builder.Configuration.GetSection("IpRateLimiting"));
@@ -115,47 +144,16 @@ builder.Services.AddSingleton<IRateLimitConfiguration, RateLimitConfiguration>()
 builder.Services.AddSingleton<IIpPolicyStore, MemoryCacheIpPolicyStore>();
 builder.Services.AddSingleton<IRateLimitCounterStore, MemoryCacheRateLimitCounterStore>();
 
-
-// AWS S3 Configuration
+// AWS and Cloudinary
 builder.Services.AddAWSService<IAmazonS3>();
-builder.Services.AddScoped<IImageService, ImageService>();
-
-// Cloudinary Configuration
 var cloudinaryAccount = new Account(
-    builder.Configuration["Cloudinary:CloudName"],
-    builder.Configuration["Cloudinary:ApiKey"],
-    builder.Configuration["Cloudinary:ApiSecret"]
+    Environment.GetEnvironmentVariable("CLOUDINARY_CLOUD_NAME"),
+    Environment.GetEnvironmentVariable("CLOUDINARY_API_KEY"),
+    Environment.GetEnvironmentVariable("CLOUDINARY_API_SECRET")
 );
 builder.Services.AddSingleton(new Cloudinary(cloudinaryAccount));
 
-builder.Services.AddControllers();
-
-// JWT Authentication Setup
-var jwtSettings = builder.Configuration.GetSection("JwtSettings");
-var secretKey = jwtSettings["SecretKey"];
-if (string.IsNullOrEmpty(secretKey))
-{
-    Console.WriteLine("⚠️ JWT SecretKey is missing! Check AWS environment variables.");
-    throw new Exception("JWT SecretKey is missing!");
-}
-
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        options.RequireHttpsMetadata = false;
-        options.SaveToken = true;
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            ValidIssuer = jwtSettings["Issuer"],
-            ValidAudience = jwtSettings["Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey))
-        };
-    });
-
+// Swagger Configuration
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -168,7 +166,6 @@ builder.Services.AddSwaggerGen(options =>
         In = ParameterLocation.Header,
         Description = "JWT Authorization header using the Bearer scheme."
     });
-
     options.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
@@ -180,30 +177,32 @@ builder.Services.AddSwaggerGen(options =>
                     Id = "Bearer"
                 }
             },
-            new string[] {}
+            Array.Empty<string>()
         }
     });
 });
 
-// Kestrel Configuration for AWS Load Balancer
+builder.Services.AddControllers();
+builder.Services.AddHealthChecks();
+
+// Kestrel Configuration
 var port = Environment.GetEnvironmentVariable("PORT") ?? "5000";
 builder.WebHost.ConfigureKestrel(serverOptions =>
 {
     serverOptions.ListenAnyIP(int.Parse(port));
 });
 
-// Build Application BEFORE Using Services
 var app = builder.Build();
 
-// Configure Middleware
-
-    //app.UseDeveloperExceptionPage();
+// Middleware Pipeline
+//if(app.Environment.IsDevelopment())
+//{
+    app.UseDeveloperExceptionPage(); 
     app.UseSwagger();
     app.UseSwaggerUI();
-    //app.ApplyMigrations();
+//}
 
 
-// CORS Configuration for AWS
 app.UseCors(policy => policy
     .SetIsOriginAllowed(_ => true)
     .AllowAnyMethod()
@@ -214,13 +213,12 @@ app.UseFortunaExceptionHandler();
 app.UseHttpsRedirection();
 app.UseIpRateLimiting();
 app.MapHealthChecks("/health");
-// Enable Authentication & Authorization
+
+// Important: Order matters for authentication/authorization
 app.UseRouting();
-app.UseAuthentication();
+app.UseAuthentication(); // Must come before UseAuthorization
 app.UseAuthorization();
 
-// API Controllers
 app.MapControllers();
 
-// Start Application
 app.Run();
