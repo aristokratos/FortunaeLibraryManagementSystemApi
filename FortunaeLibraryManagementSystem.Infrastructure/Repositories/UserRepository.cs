@@ -36,5 +36,14 @@ namespace FortunaeLibraryManagementSystem.Infrastructure.Repositories
             _dbContext.Users.Remove(user);
             await _dbContext.SaveChangesAsync();
         }
+        public async Task<User> GetUserByEmailAsync(string email)
+        {
+            return await _dbContext.Users.FirstOrDefaultAsync(u => u.Email == email);
+        }
+        public async Task UpdateUserAsync(User user)
+        {
+            _dbContext.Users.Update(user);
+            await _dbContext.SaveChangesAsync();
+        }
     }
 }

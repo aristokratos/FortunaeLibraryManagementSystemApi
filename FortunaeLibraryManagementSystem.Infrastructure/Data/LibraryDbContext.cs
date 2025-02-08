@@ -12,6 +12,17 @@
         public DbSet<Borrowing> Borrowings { get; set; }
         public DbSet<Rating> Ratings { get; set; }
 
+        public LibraryDbContext() { }
+
+        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        {
+            if (!optionsBuilder.IsConfigured)
+            {
+                // Provide a default connection string for migrations
+                optionsBuilder.UseSqlServer("YourConnectionStringHere");
+            }
+        }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);

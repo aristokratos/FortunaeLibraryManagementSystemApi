@@ -19,9 +19,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Infrastructure", "Infrastru
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{7593B93C-271E-4BE3-932E-0D15ECE0D790}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LibraryManagementSystem.UnitTests", "LibraryManagementSystem.UnitTests\LibraryManagementSystem.UnitTests.csproj", "{2BD403A0-ADEE-4A71-ADB6-F1251AB1580A}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LibraryManagementSystem.UnitTests", "LibraryManagementSystem.UnitTests\LibraryManagementSystem.UnitTests.csproj", "{2BD403A0-ADEE-4A71-ADB6-F1251AB1580A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FortunaeLibraryManagementSystem.Service", "FortunaeLibraryManagementSystem.Service\FortunaeLibraryManagementSystem.Service.csproj", "{FA491695-3449-4BF3-BDEF-5F508259ADBF}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "FortunaeLibraryManagementSystem.Service", "FortunaeLibraryManagementSystem.Service\FortunaeLibraryManagementSystem.Service.csproj", "{FA491695-3449-4BF3-BDEF-5F508259ADBF}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

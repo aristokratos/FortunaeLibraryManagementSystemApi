@@ -1,8 +1,7 @@
-#See https://aka.ms/customizecontainer to learn how to customize your debug container and how Visual Studio uses this Dockerfile to build your images for faster debugging.
-
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
 USER app
 WORKDIR /app
+
 EXPOSE 8080
 EXPOSE 8081
 
@@ -25,4 +24,5 @@ RUN dotnet publish "./FortunaeLibraryManagementSystem.csproj" -c $BUILD_CONFIGUR
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
-ENTRYPOINT ["dotnet", "FortunaeLibraryManagementSystem.dll"]
+
+ENTRYPOINT ["dotnet", "FortunaeLibraryManagementSystem.dll", "--urls", "http://0.0.0.0:5000"]

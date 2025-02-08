@@ -9,6 +9,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using System.Security.Cryptography;
+using FortunaeLibraryManagementSystem.Service.DTO;
 
 namespace FortunaeLibraryManagementSystem.Service.Services
 {
@@ -16,12 +17,6 @@ namespace FortunaeLibraryManagementSystem.Service.Services
     {
         private readonly IConfiguration _configuration;
         private readonly IUserRepository _userRepository;
-
-        private readonly Dictionary<string, (string Password, string Role)> _users = new()
-        {
-            { "admin", ("password", "Admin") },
-            { "member", ("password", "Member") }
-        };
 
         public AuthService(IConfiguration configuration, IUserRepository userRepository)
         {
@@ -35,37 +30,77 @@ namespace FortunaeLibraryManagementSystem.Service.Services
             if (existingUser != null)
                 throw new InvalidOperationException(Message.UserNameAlreadyExists);
 
+            var existingEmail = await _userRepository.GetUserByEmailAsync(registerDto.Email);
+            if (existingEmail != null)
+                throw new InvalidOperationException(Message.EmailAlreadyExists);
+
             var passwordHash = HashPassword(registerDto.Password);
 
             var user = new User
             {
                 Id = Guid.NewGuid(),
                 Username = registerDto.Username,
+                Email = registerDto.Email,
                 PasswordHash = passwordHash,
-                Role = registerDto.Role
+                Role = registerDto.Role,
+                Name = registerDto.Name,
+                DateOfBirth = registerDto.DateOfBirth,
+                ProfileSummary = registerDto.ProfileSummary
             };
 
             await _userRepository.AddUserAsync(user);
-
             return true;
         }
 
-        public async Task<string> LoginAsync(string username, string password)
+        public async Task<string> LoginAsync(string identifier, string password)
         {
-            var user = await _userRepository.GetUserByUsernameAsync(username);
+            var user = await _userRepository.GetUserByUsernameAsync(identifier) ??
+                       await _userRepository.GetUserByEmailAsync(identifier);
 
-            if (user == null)
-                throw new UnauthorizedAccessException(Message.InvalidCredentials);
-
-            if (!VerifyPassword(password, user.PasswordHash))
+            if (user == null || !VerifyPassword(password, user.PasswordHash))
                 throw new UnauthorizedAccessException(Message.InvalidCredentials);
 
             return GenerateJwtToken(user.Username, user.Role, user.Id.ToString());
         }
 
+        public async Task<bool> ResetPasswordAsync(string email, string newPassword)
+        {
+            var user = await _userRepository.GetUserByEmailAsync(email);
+            if (user == null)
+                throw new KeyNotFoundException(Message.UserNotFound);
+
+            user.PasswordHash = HashPassword(newPassword);
+            await _userRepository.UpdateUserAsync(user);
+            return true;
+        }
+
+        public async Task<bool> UpdateProfileAsync(Guid userId, UpdateProfileDTO profileDto)
+        {
+            var user = await _userRepository.GetUserByIdAsync(userId);
+            if (user == null)
+                throw new KeyNotFoundException(Message.UserNotFound);
+
+            user.Name = profileDto.Name ?? user.Name;
+            user.DateOfBirth = profileDto.DateOfBirth ?? user.DateOfBirth;
+            user.ProfileSummary = profileDto.ProfileSummary ?? user.ProfileSummary;
+
+            await _userRepository.UpdateUserAsync(user);
+            return true;
+        }
+
         public async Task<User> GetUserByIdAsync(Guid id)
         {
             return await _userRepository.GetUserByIdAsync(id);
+        }
+
+        public async Task<bool> DeleteUserAsync(Guid id)
+        {
+            var user = await _userRepository.GetUserByIdAsync(id);
+            if (user == null)
+                throw new KeyNotFoundException(Message.UserNotFound);
+
+            await _userRepository.DeleteUserAsync(user);
+            return true;
         }
 
         private string GenerateJwtToken(string username, string role, string userId)
@@ -79,10 +114,10 @@ namespace FortunaeLibraryManagementSystem.Service.Services
 
             var claims = new[]
             {
-            new Claim(ClaimTypes.Name, username),
-            new Claim(ClaimTypes.Role, role),
-            new Claim("UserId", userId)
-        };
+                new Claim(ClaimTypes.Name, username),
+                new Claim(ClaimTypes.Role, role),
+                new Claim("UserId", userId)
+            };
 
             var tokenHandler = new JwtSecurityTokenHandler();
             var tokenDescriptor = new SecurityTokenDescriptor
@@ -95,21 +130,7 @@ namespace FortunaeLibraryManagementSystem.Service.Services
             };
 
             var token = tokenHandler.CreateToken(tokenDescriptor);
-
             return tokenHandler.WriteToken(token);
-        }
-
-
-
-        public async Task<bool> DeleteUserAsync(Guid id)
-        {
-            var user = await _userRepository.GetUserByIdAsync(id);
-            if (user == null)
-                throw new KeyNotFoundException(Message.UserNotFound);
-
-            await _userRepository.DeleteUserAsync(user);
-
-            return true;
         }
 
         private string HashPassword(string password)
@@ -125,6 +146,5 @@ namespace FortunaeLibraryManagementSystem.Service.Services
             var passwordHash = HashPassword(password);
             return passwordHash == hashedPassword;
         }
-
     }
 }

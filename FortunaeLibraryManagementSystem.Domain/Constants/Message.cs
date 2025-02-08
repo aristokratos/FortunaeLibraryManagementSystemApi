@@ -47,4 +47,5 @@ public static class Message
     public const string BookNotAvailable = "The requested book is not available for borrowing.";
     public const string BorrowLimimit = "Members can only borrow up to 3 books at a time.";
     public const string BorrowingRecordNotFound = "Borrowing record not found.";
+    public const string EmailAlreadyExists = "Email already exists.";
 }

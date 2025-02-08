@@ -10,5 +10,7 @@ namespace FortunaeLibraryManagementSystem.Infrastructure.Interfaces
         Task AddUserAsync(User user);
         Task<User> GetUserByIdAsync(Guid id);
         Task DeleteUserAsync(User user);
+        Task<User> GetUserByEmailAsync(string email);
+        Task UpdateUserAsync(User user);
     }
 }

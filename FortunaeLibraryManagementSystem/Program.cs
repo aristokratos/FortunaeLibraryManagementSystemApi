@@ -16,16 +16,41 @@ using Amazon.S3;
 using StackExchange.Redis;
 using DotNetEnv;
 using static FortunaeLibraryManagementSystem.AppSettings;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Amazon;
 
 Env.Load();
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Enable logging
+
+
+var logger = LoggerFactory.Create(config =>
+{
+    config.AddConsole();
+    config.SetMinimumLevel(LogLevel.Debug);
+}).CreateLogger("Program");
+
+try
+{
+    logger.LogInformation("Starting web application");
+}
+catch (Exception ex)
+{
+    logger.LogError(ex, "Application start-up failed");
+    throw;
+}
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 
-// Configuration Settings
 var jwtIssuer = Environment.GetEnvironmentVariable("JWT_ISSUER")
     ?? throw new Exception("JWT_ISSUER is missing!");
 var jwtAudience = Environment.GetEnvironmentVariable("JWT_AUDIENCE")
@@ -37,12 +62,13 @@ var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION")
 var redisConnection = Environment.GetEnvironmentVariable("REDIS_CONNECTION")
     ?? throw new Exception("REDIS_CONNECTION is missing!");
 
-// Database Configuration
-builder.Services.AddDbContext<LibraryDbContext>(options =>
-    options.UseSqlServer(connectionString, sqlOptions =>
-        sqlOptions.EnableRetryOnFailure()));
+//builder.Services.AddDbContext<LibraryDbContext>(options =>
+//    options.UseSqlServer(connectionString, sqlOptions =>
+//        sqlOptions.EnableRetryOnFailure()));
 
-// Redis Configuration
+builder.Services.AddDbContext<LibraryDbContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
 var redisOptions = ConfigurationOptions.Parse(redisConnection);
 redisOptions.ConnectRetry = 5;
 redisOptions.ConnectTimeout = 5000;
@@ -58,7 +84,12 @@ builder.Services.AddStackExchangeRedisCache(options =>
     options.InstanceName = "FortunaeCache:";
 });
 
-// JWT Authentication
+builder.Services.Configure<CookiePolicyOptions>(options =>
+{
+    options.CheckConsentNeeded = context => true;
+    options.MinimumSameSitePolicy = SameSiteMode.Strict;
+});
+
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -67,14 +98,14 @@ builder.Services.AddAuthentication(options =>
 })
 .AddJwtBearer(options =>
 {
-    options.RequireHttpsMetadata = false;
+    options.RequireHttpsMetadata = true;
     options.SaveToken = true;
     options.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuer = true,
         ValidateAudience = true,
         ValidateLifetime = true,
-        ValidateIssuerSigningKey = true,
+        //ValidateIssuerSigningKey = true,
         ValidIssuer = jwtIssuer,
         ValidAudience = jwtAudience,
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecretKey)),
@@ -99,8 +130,16 @@ builder.Services.AddAuthentication(options =>
         }
     };
 });
+builder.Configuration.SetBasePath(Directory.GetCurrentDirectory())
+    .AddJsonFile("appsettings.json", optional: false);
 
-// Service Configuration
+var awsConfig = builder.Configuration.GetSection("AWS").Get<AWSSettings>();
+
+builder.Services.AddSingleton(new AmazonS3Client(
+    awsConfig.AccessKeyId,
+    awsConfig.SecretAccessKey,
+    RegionEndpoint.GetBySystemName(awsConfig.Region)
+));
 builder.Services.Configure<AWSSettings>(options =>
 {
     options.AccessKeyId = Environment.GetEnvironmentVariable("AWS_ACCESS_KEY_ID");
@@ -116,6 +155,7 @@ builder.Services.Configure<CloudinarySettings>(options =>
     options.ApiSecret = Environment.GetEnvironmentVariable("CLOUDINARY_API_SECRET");
 });
 
+
 builder.Services.Configure<JwtSettings>(options =>
 {
     options.Issuer = jwtIssuer;
@@ -124,7 +164,6 @@ builder.Services.Configure<JwtSettings>(options =>
     options.ExpirationTime = int.Parse(Environment.GetEnvironmentVariable("JWT_EXPIRATION") ?? "30");
 });
 
-// Dependency Injection
 builder.Services.AddScoped<IRedisService, RedisService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
@@ -135,7 +174,6 @@ builder.Services.AddScoped<IBorrowingRepository, BorrowingRepository>();
 builder.Services.AddScoped<IRatingRepository, RatingRepository>();
 builder.Services.AddScoped<IImageService, ImageService>();
 
-// Rate Limiting
 builder.Services.AddInMemoryRateLimiting();
 builder.Services.AddMemoryCache();
 builder.Services.Configure<IpRateLimitOptions>(builder.Configuration.GetSection("IpRateLimiting"));
@@ -144,7 +182,6 @@ builder.Services.AddSingleton<IRateLimitConfiguration, RateLimitConfiguration>()
 builder.Services.AddSingleton<IIpPolicyStore, MemoryCacheIpPolicyStore>();
 builder.Services.AddSingleton<IRateLimitCounterStore, MemoryCacheRateLimitCounterStore>();
 
-// AWS and Cloudinary
 builder.Services.AddAWSService<IAmazonS3>();
 var cloudinaryAccount = new Account(
     Environment.GetEnvironmentVariable("CLOUDINARY_CLOUD_NAME"),
@@ -153,7 +190,6 @@ var cloudinaryAccount = new Account(
 );
 builder.Services.AddSingleton(new Cloudinary(cloudinaryAccount));
 
-// Swagger Configuration
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -185,23 +221,29 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddControllers();
 builder.Services.AddHealthChecks();
 
-// Kestrel Configuration
-var port = Environment.GetEnvironmentVariable("PORT") ?? "5000";
+
 builder.WebHost.ConfigureKestrel(serverOptions =>
 {
-    serverOptions.ListenAnyIP(int.Parse(port));
+    serverOptions.Limits.MaxRequestHeadersTotalSize = 65536;
+    //var port = Environment.GetEnvironmentVariable("PORT") ?? "5000";
+    //serverOptions.ListenAnyIP(int.Parse(port), options =>
+    //{
+    //    options.Protocols = Microsoft.AspNetCore.Server.Kestrel.Core.HttpProtocols.Http1AndHttp2;
+    //});
 });
+
 
 var app = builder.Build();
 
-// Middleware Pipeline
-//if(app.Environment.IsDevelopment())
-//{
-    app.UseDeveloperExceptionPage(); 
-    app.UseSwagger();
-    app.UseSwaggerUI();
-//}
+app.UseForwardedHeaders();
 
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
+
+app.UseSwagger();
+app.UseSwaggerUI();
 
 app.UseCors(policy => policy
     .SetIsOriginAllowed(_ => true)
@@ -210,15 +252,34 @@ app.UseCors(policy => policy
 );
 
 app.UseFortunaExceptionHandler();
-app.UseHttpsRedirection();
 app.UseIpRateLimiting();
-app.MapHealthChecks("/health");
+builder.Services.AddHealthChecks();
 
-// Important: Order matters for authentication/authorization
+app.MapHealthChecks("/api/health", new HealthCheckOptions
+{
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.ContentType = "application/json";
+        await context.Response.WriteAsJsonAsync(new
+        {
+            status = report.Status.ToString(),
+            checks = report.Entries.Select(e => new
+            {
+                name = e.Key,
+                status = e.Value.Status.ToString(),
+                description = e.Value.Description
+            })
+        });
+    }
+});
+
 app.UseRouting();
-app.UseAuthentication(); // Must come before UseAuthorization
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+//string port = Environment.GetEnvironmentVariable("PORT") ?? "5000";
+//string ip = Environment.GetEnvironmentVariable("HOST") ?? "0.0.0.0";
 
 app.Run();
