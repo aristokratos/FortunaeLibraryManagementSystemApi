@@ -13,7 +13,6 @@ namespace FortunaeLibraryManagementSystem.Domain.Entities
         public bool IsAvailable { get; set; }
         public string? BookImage { get; set; }
         public decimal AverageRating { get; set; } 
-
         public ICollection<Rating> Ratings { get; set; } = new List<Rating>();
     }
 }

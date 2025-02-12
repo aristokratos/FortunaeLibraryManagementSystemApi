@@ -196,19 +196,19 @@ namespace FortunaeLibraryManagementSystem.Service.Services
                 .Select(MapToBookDTO)
                 .ToList();
         }
-        //public async Task<List<BookDTO>> GetCachedTopRatedBooksAsync()
-        //{
-        //    string cacheKey = "TopRatedBooks";
+        public async Task<List<BookDTO>> GetCachedTopRatedBooksAsync()
+        {
+            string cacheKey = "TopRatedBooks";
 
-        //    var cachedBooks = await _cache.GetAsync<List<BookDTO>>(cacheKey);
-        //    if (cachedBooks != null)
-        //        return cachedBooks;
+            var cachedBooks = await _cache.GetAsync<List<BookDTO>>(cacheKey);
+            if (cachedBooks != null)
+                return cachedBooks;
 
-        //    var books = await GetTopRatedBooksAsync();
-        //    await _cache.SetAsync(cacheKey, books, TimeSpan.FromMinutes(15));
+            var books = await GetTopRatedBooksAsync();
+            await _cache.SetAsync(cacheKey, books, TimeSpan.FromMinutes(15));
 
-        //    return books;
-        //}
+            return books;
+        }
 
         public async Task<List<BookDTO>> SearchBooksAsync(string? title = null, string? author = null, string? genre = null, bool? isAvailable = null)
         {
