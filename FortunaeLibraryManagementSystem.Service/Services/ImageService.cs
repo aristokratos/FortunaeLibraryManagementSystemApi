@@ -47,7 +47,12 @@ using FortunaeLibraryManagementSystem.Service.Interfaces;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using System;
+using System.IO;
 using System.Net;
+using System.Threading.Tasks;
+using FortunaeLibraryManagementSystem.Service.DTOs;
+
 namespace FortunaeLibraryManagementSystem.Service.Services
 {
     public class ImageService : IImageService
@@ -64,15 +69,55 @@ namespace FortunaeLibraryManagementSystem.Service.Services
         }
 
         private static readonly HashSet<string> AllowedExtensions = new HashSet<string>
-    {
-        ".jpg", ".jpeg", ".png", ".gif",
-        ".bmp", ".tiff", ".tif"
-    };
+        {
+            ".jpg", ".jpeg", ".png", ".gif",
+            ".bmp", ".tiff", ".tif"
+        };
 
-        public async Task<string> UploadImageAsync(IFormFile file)
+        private async Task<bool> ValidateBucketAsync()
         {
             try
             {
+                var request = new ListBucketsRequest();
+                var response = await _s3Client.ListBucketsAsync();
+
+                return response.Buckets.Exists(b => b.BucketName == _bucketName);
+            }
+            catch (AmazonS3Exception ex)
+            {
+                _logger.LogError(ex, "Error validating bucket: {Message}", ex.Message);
+                throw;
+            }
+        }
+
+        private async Task CreateBucketIfNotExistsAsync()
+        {
+            try
+            {
+                if (!await ValidateBucketAsync())
+                {
+                    var request = new PutBucketRequest
+                    {
+                        BucketName = _bucketName,
+                        UseClientRegion = true
+                    };
+                    await _s3Client.PutBucketAsync(request);
+                    _logger.LogInformation($"Created new bucket: {_bucketName}");
+                }
+            }
+            catch (AmazonS3Exception ex)
+            {
+                _logger.LogError(ex, "Error creating bucket: {Message}", ex.Message);
+                throw;
+            }
+        }
+
+        public async Task<ImageUrlResponseDto> UploadImageAsync(IFormFile file)
+        {
+            try
+            {
+                await CreateBucketIfNotExistsAsync();
+
                 // Validate file
                 if (file == null || file.Length == 0)
                     throw new ArgumentException("File cannot be null or empty");
@@ -84,35 +129,142 @@ namespace FortunaeLibraryManagementSystem.Service.Services
                 // Generate unique filename
                 var fileKey = $"books/{Guid.NewGuid():N}_{DateTime.UtcNow:yyyyMMddHHmmss}_{Path.GetFileNameWithoutExtension(file.FileName)}{extension}";
 
-                // Configure upload parameters
+                // Configure upload parameters without public ACL
                 var request = new PutObjectRequest
                 {
                     BucketName = _bucketName,
                     Key = fileKey,
                     ContentType = file.ContentType,
                     InputStream = file.OpenReadStream(),
-                    AutoCloseStream = true,
-                    CannedACL = S3CannedACL.PublicRead
+                    AutoCloseStream = true
                 };
 
-                // Upload with retry logic
                 await _s3Client.PutObjectAsync(request);
+                _logger.LogInformation($"Successfully uploaded image to {fileKey}");
 
-                // Verify upload
-                var response = await _s3Client.GetObjectMetadataAsync(_bucketName, fileKey);
-                if (response.HttpStatusCode != HttpStatusCode.OK)
-                    throw new Exception($"Failed to verify uploaded object metadata");
+                // Generate presigned URL
+                var presignedUrl = await GeneratePresignedUrlAsync(fileKey);
 
-                return $"https://{_bucketName}.s3.amazonaws.com/{fileKey}";
+                return new ImageUrlResponseDto
+                {
+                    S3Url = $"https://{_bucketName}.s3.amazonaws.com/{fileKey}",
+                    PresignedUrl = presignedUrl
+                };
             }
             catch (AmazonS3Exception ex)
             {
-                _logger.LogError(ex, "Error uploading image to S3: {Message}", ex.Message);
+                _logger.LogError(ex, "Detailed error information: {Message}", ex.Message);
+                _logger.LogError($"Request ID: {ex.RequestId}");
                 throw;
             }
-            catch (Exception ex)
+        }
+
+        private async Task<string> GeneratePresignedUrlAsync(string fileKey)
+        {
+            try
             {
-                _logger.LogError(ex, "Unexpected error during image upload: {Message}", ex.Message);
+                var request = new GetPreSignedUrlRequest
+                {
+                    BucketName = _bucketName,
+                    Key = fileKey,
+                    Verb = HttpVerb.GET,
+                    Expires = DateTime.UtcNow.AddHours(24) 
+                };
+
+                return _s3Client.GetPreSignedURL(request);
+            }
+            catch (AmazonS3Exception ex)
+            {
+                _logger.LogError(ex, "Error generating presigned URL: {Message}", ex.Message);
+                throw;
+            }
+        }
+
+        public async Task<bool> UpdateImageAsync(string fileKey, IFormFile file)
+        {
+            try
+            {
+                // Validate file
+                if (file == null || file.Length == 0)
+                    throw new ArgumentException("File cannot be null or empty");
+
+                var extension = Path.GetExtension(file.FileName).ToLower();
+                if (!AllowedExtensions.Contains(extension))
+                    throw new ArgumentException($"Invalid file type. Only {string.Join(", ", AllowedExtensions)} are allowed.");
+
+                // Check if file exists
+                var request = new GetObjectMetadataRequest
+                {
+                    BucketName = _bucketName,
+                    Key = fileKey
+                };
+                await _s3Client.GetObjectMetadataAsync(request);
+
+                // Upload new version
+                var putRequest = new PutObjectRequest
+                {
+                    BucketName = _bucketName,
+                    Key = fileKey,
+                    ContentType = file.ContentType,
+                    InputStream = file.OpenReadStream(),
+                    AutoCloseStream = true
+                };
+
+                await _s3Client.PutObjectAsync(putRequest);
+                _logger.LogInformation($"Successfully updated image: {fileKey}");
+
+                return true;
+            }
+            catch (AmazonS3Exception ex)
+            {
+                _logger.LogError(ex, "Error updating image: {Message}", ex.Message);
+                throw;
+            }
+        }
+
+        public async Task<bool> DeleteImageAsync(string fileKey)
+        {
+            try
+            {
+                var request = new DeleteObjectRequest
+                {
+                    BucketName = _bucketName,
+                    Key = fileKey
+                };
+
+                await _s3Client.DeleteObjectAsync(request);
+                _logger.LogInformation($"Successfully deleted image: {fileKey}");
+
+                return true;
+            }
+            catch (AmazonS3Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting image: {Message}", ex.Message);
+                throw;
+            }
+        }
+
+        public async Task<Stream> GetImageAsync(string fileKey)
+        {
+            try
+            {
+                var request = new GetObjectRequest
+                {
+                    BucketName = _bucketName,
+                    Key = fileKey
+                };
+
+                using var response = await _s3Client.GetObjectAsync(request);
+                var stream = new MemoryStream();
+                await response.ResponseStream.CopyToAsync(stream);
+                stream.Position = 0;
+                _logger.LogInformation($"Successfully retrieved image: {fileKey}");
+
+                return stream;
+            }
+            catch (AmazonS3Exception ex)
+            {
+                _logger.LogError(ex, "Error getting image: {Message}", ex.Message);
                 throw;
             }
         }

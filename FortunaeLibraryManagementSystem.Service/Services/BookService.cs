@@ -17,7 +17,7 @@ namespace FortunaeLibraryManagementSystem.Service.Services
         private readonly IRatingRepository _ratingRepository;
         private readonly ILogger<BookService> _logger;
         private readonly IImageService _imageService;
-       // private readonly IMemoryCache _memoryCache;
+        //private readonly IMemoryCache _memoryCache;
         private readonly IRedisService _cache;
         private const int CACHE_DURATION_MINUTES = 10;
 
@@ -40,7 +40,9 @@ namespace FortunaeLibraryManagementSystem.Service.Services
                     throw new ArgumentException("Image cannot be null.", nameof(createBookDto.Image));
                 }
 
-                string imageName = await _imageService.UploadImageAsync(createBookDto.Image);
+                // Use ImageUrlResponseDto instead of string
+                ImageUrlResponseDto imageResponse = await _imageService.UploadImageAsync(createBookDto.Image);
+                string imageName = imageResponse.PresignedUrl;
 
                 var book = new Book
                 {
@@ -51,7 +53,7 @@ namespace FortunaeLibraryManagementSystem.Service.Services
                     ISBN = createBookDto.ISBN,
                     Description = createBookDto.Description,
                     IsAvailable = true,
-                    BookImage = imageName 
+                    BookImage = imageName
                 };
 
                 await _bookRepository.AddBookAsync(book);
@@ -73,8 +75,9 @@ namespace FortunaeLibraryManagementSystem.Service.Services
 
             if (updateBookDto.Image != null)
             {
-                string imageName = await _imageService.UploadImageAsync(updateBookDto.Image);
-                book.BookImage = imageName;
+                // Use ImageUrlResponseDto instead of string
+                ImageUrlResponseDto imageResponse = await _imageService.UploadImageAsync(updateBookDto.Image);
+                book.BookImage = imageResponse.PresignedUrl;
             }
 
             book.Title = updateBookDto.Title ?? book.Title;
@@ -85,8 +88,6 @@ namespace FortunaeLibraryManagementSystem.Service.Services
             book.IsAvailable = updateBookDto.IsAvailable ?? book.IsAvailable;
 
             await _bookRepository.UpdateBookAsync(book);
-
-            await InvalidateBookCaches(id);
 
             return MapToBookDTO(book);
         }
@@ -195,19 +196,19 @@ namespace FortunaeLibraryManagementSystem.Service.Services
                 .Select(MapToBookDTO)
                 .ToList();
         }
-        public async Task<List<BookDTO>> GetCachedTopRatedBooksAsync()
-        {
-            string cacheKey = "TopRatedBooks";
+        //public async Task<List<BookDTO>> GetCachedTopRatedBooksAsync()
+        //{
+        //    string cacheKey = "TopRatedBooks";
 
-            var cachedBooks = await _cache.GetAsync<List<BookDTO>>(cacheKey);
-            if (cachedBooks != null)
-                return cachedBooks;
+        //    var cachedBooks = await _cache.GetAsync<List<BookDTO>>(cacheKey);
+        //    if (cachedBooks != null)
+        //        return cachedBooks;
 
-            var books = await GetTopRatedBooksAsync();
-            await _cache.SetAsync(cacheKey, books, TimeSpan.FromMinutes(15));
+        //    var books = await GetTopRatedBooksAsync();
+        //    await _cache.SetAsync(cacheKey, books, TimeSpan.FromMinutes(15));
 
-            return books;
-        }
+        //    return books;
+        //}
 
         public async Task<List<BookDTO>> SearchBooksAsync(string? title = null, string? author = null, string? genre = null, bool? isAvailable = null)
         {

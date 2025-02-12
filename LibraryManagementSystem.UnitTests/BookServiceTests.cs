@@ -1,143 +1,133 @@
-//using FortunaeLibraryManagementSystem.Domain.Entities;
-//using FortunaeLibraryManagementSystem.Service.Interfaces;
-//using FortunaeLibraryManagementSystem.Service.Services;
-//using Moq;
-//using System;
-//using System.Collections.Generic;
-//using System.Text.Json;
-//using System.Threading.Tasks;
-//using Xunit;
-//using FluentAssertions;
-//using FortunaeLibraryManagementSystem.Infrastructure.Interfaces;
-//using Microsoft.Extensions.Caching.Distributed;
+using Xunit;
+using Moq;
+using FortunaeLibraryManagementSystem.Service.Services;
+using FortunaeLibraryManagementSystem.Service.Interfaces;
+using FortunaeLibraryManagementSystem.Service.DTOs;
+using FortunaeLibraryManagementSystem.Domain.Entities;
+using Microsoft.Extensions.Logging;
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using FluentAssertions;
+using FortunaeLibraryManagementSystem.Infrastructure.Interfaces;
+using FortunaeLibraryManagementSystem.Service.Services.CacheService;
+using System.IO;
+using Microsoft.AspNetCore.Http;
 
-//namespace LibraryManagementSystem.UnitTests
-//{
-//    public class BookServiceTests
-//    {
-//        private readonly Mock<IBookRepository> _bookRepositoryMock;
-//        private readonly Mock<IDistributedCache> _cacheMock; // Mock for Redis Cache
-//        private readonly IBookService _bookService;
+public class BookServiceTests
+{
+    private readonly Mock<IBookRepository> _bookRepositoryMock;
+    private readonly Mock<IRatingRepository> _ratingRepositoryMock;
+    private readonly Mock<IImageService> _imageServiceMock;
+    private readonly Mock<IRedisService> _cacheMock;
+    private readonly Mock<ILogger<BookService>> _loggerMock;
+    private readonly BookService _bookService;
 
-//        public BookServiceTests()
-//        {
-//            // Initialize Mocks
-//            _bookRepositoryMock = new Mock<IBookRepository>();
-//            _cacheMock = new Mock<IDistributedCache>();
+    public BookServiceTests()
+    {
+        _bookRepositoryMock = new Mock<IBookRepository>();
+        _ratingRepositoryMock = new Mock<IRatingRepository>();
+        _imageServiceMock = new Mock<IImageService>();
+        _cacheMock = new Mock<IRedisService>();
+        _loggerMock = new Mock<ILogger<BookService>>();
 
-//            // Inject the Mocks into the Service
-//            _bookService = new BookService(_bookRepositoryMock.Object, _cacheMock.Object);
-//        }
+        _bookService = new BookService(
+            _bookRepositoryMock.Object,
+            _loggerMock.Object,
+            _imageServiceMock.Object,
+            _cacheMock.Object,
+            _ratingRepositoryMock.Object
+        );
+    }
 
-//        [Fact]
-//        public async Task GetAllBooksAsync_ShouldReturnBooks_FromCache_WhenCacheIsAvailable()
-//        {
-//            // Arrange
-//            var books = new List<Book>
-//            {
-//                new Book { Id = Guid.NewGuid(), Title = "Book 1", Author = "Author 1", IsAvailable = true },
-//                new Book { Id = Guid.NewGuid(), Title = "Book 2", Author = "Author 2", IsAvailable = true }
-//            };
-//            var cachedBooks = JsonSerializer.Serialize(books);
+    [Fact]
+    public async Task AddBookAsync_ShouldAddBook_WhenValidInputProvided()
+    {
+        var fileMock = new Mock<IFormFile>();
+        var stream = new MemoryStream(new byte[0]);
+        fileMock.Setup(f => f.OpenReadStream()).Returns(stream);
+        fileMock.Setup(f => f.Length).Returns(0);
+        fileMock.Setup(f => f.FileName).Returns("test.jpg");
 
-//            // Mock Redis cache to return cached data
-//            _cacheMock
-//                .Setup(cache => cache.GetStringAsync("AllBooks", default))
-//                .ReturnsAsync(cachedBooks);
+        // Arrange
+        var createBookDto = new CreateBookDTO
+        {
+            Title = "Test Book",
+            Author = "Test Author",
+            Genre = "Fiction",
+            ISBN = "1234567890",
+            Description = "A test book description",
+            Image = fileMock.Object,
 
-//            // Act
-//            var result = await _bookService.GetBooksAsync(true, null, null, 1, 10);
+        };
 
-//            // Assert
-//            result.Should().NotBeNull();
-//            result.Count.Should().Be(2);
-//            result[0].Title.Should().Be("Book 1");
-//            result[1].Title.Should().Be("Book 2");
+        var imageResponse = new ImageUrlResponseDto { PresignedUrl = "http://image.url" };
+        _imageServiceMock.Setup(x => x.UploadImageAsync(fileMock.Object)).ReturnsAsync(imageResponse);
 
-//            // Ensure the repository is NOT called (since data came from cache)
-//            _bookRepositoryMock.Verify(repo => repo.GetBooksAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>()), Times.Never);
+        _bookRepositoryMock.Setup(x => x.AddBookAsync(It.IsAny<Book>())).Returns(Task.CompletedTask);
 
-//            // Ensure cache was accessed
-//            _cacheMock.Verify(cache => cache.GetStringAsync("AllBooks", default), Times.Once);
-//        }
+        // Act
+        var result = await _bookService.AddBookAsync(createBookDto);
 
-//        [Fact]
-//        public async Task GetAllBooksAsync_ShouldReturnBooks_FromDatabase_WhenCacheIsNotAvailable()
-//        {
-//            // Arrange
-//            var books = new List<Book>
-//            {
-//                new Book { Id = Guid.NewGuid(), Title = "Book 1", Author = "Author 1", IsAvailable = true },
-//                new Book { Id = Guid.NewGuid(), Title = "Book 2", Author = "Author 2", IsAvailable = true }
-//            };
+        // Assert
+        result.Should().NotBeNull();
+        result.Title.Should().Be(createBookDto.Title);
+        result.BookImage.Should().Be(imageResponse.PresignedUrl);
+    }
 
-//            // Mock Redis cache to return null (cache miss)
-//            _cacheMock
-//                .Setup(cache => cache.GetStringAsync("AllBooks", default))
-//                .ReturnsAsync((string)null);
+    [Fact]
+    public async Task GetBooksByIdAsync_ShouldReturnBook_WhenBookExists()
+    {
+        // Arrange
+        var bookId = Guid.NewGuid();
+        var book = new Book
+        {
+            Id = bookId,
+            Title = "Sample Book",
+            Author = "Author",
+            Genre = "Genre",
+            ISBN = "123456",
+            Description = "Description",
+            IsAvailable = true
+        };
 
-//            // Mock repository to return books from the database
-//            _bookRepositoryMock
-//                .Setup(repo => repo.GetBooksAsync(null, null, 1, 10))
-//                .ReturnsAsync(books);
+        _bookRepositoryMock.Setup(x => x.GetBookByIdAsync(bookId)).ReturnsAsync(book);
 
-//            // Act
-//            var result = await _bookService.GetBooksAsync(true, null, null, 1, 10);
+        // Act
+        var result = await _bookService.GetBooksByIdAsync(bookId);
 
-//            // Assert
-//            result.Should().NotBeNull();
-//            result.Count.Should().Be(2);
-//            result[0].Title.Should().Be("Book 1");
-//            result[1].Title.Should().Be("Book 2");
+        // Assert
+        result.Should().NotBeNull();
+        result.Id.Should().Be(bookId);
+    }
 
-//            // Ensure the repository was called (since data came from the database)
-//            _bookRepositoryMock.Verify(repo => repo.GetBooksAsync(null, null, 1, 10), Times.Once);
+    [Fact]
+    public async Task DeleteBookAsync_ShouldReturnFalse_WhenBookDoesNotExist()
+    {
+        // Arrange
+        var bookId = Guid.NewGuid();
+        _bookRepositoryMock.Setup(x => x.GetBookByIdAsync(bookId)).ReturnsAsync((Book)null);
 
-//            // Ensure cache was accessed
-//            _cacheMock.Verify(cache => cache.GetStringAsync("AllBooks", default), Times.Once);
+        // Act
+        var result = await _bookService.DeleteBookAsync(bookId);
 
-//            // Ensure cache was updated
-//            _cacheMock.Verify(cache => cache.SetStringAsync(
-//                "AllBooks", It.IsAny<string>(), It.IsAny<DistributedCacheEntryOptions>(), default), Times.Once);
-//        }
+        // Assert
+        result.Should().BeFalse();
+    }
 
-//        [Fact]
-//        public async Task GetAllBooksAsync_ShouldReturnFilteredBooks_WhenFilterIsApplied()
-//        {
-//            // Arrange
-//            var books = new List<Book>
-//            {
-//                new Book { Id = Guid.NewGuid(), Title = "Book 1", Author = "Author 1", Genre = "Fiction", IsAvailable = true },
-//                new Book { Id = Guid.NewGuid(), Title = "Book 2", Author = "Author 2", Genre = "Non-Fiction", IsAvailable = true }
-//            };
+    [Fact]
+    public async Task DeleteBookAsync_ShouldReturnTrue_WhenBookExists()
+    {
+        // Arrange
+        var bookId = Guid.NewGuid();
+        var book = new Book { Id = bookId, Title = "Sample Book" };
+        _bookRepositoryMock.Setup(x => x.GetBookByIdAsync(bookId)).ReturnsAsync(book);
+        _bookRepositoryMock.Setup(x => x.DeleteBookAsync(book)).Returns(Task.CompletedTask);
 
-//            // Mock Redis cache to return null (cache miss)
-//            _cacheMock
-//                .Setup(cache => cache.GetStringAsync("AllBooks", default))
-//                .ReturnsAsync((string)null);
+        // Act
+        var result = await _bookService.DeleteBookAsync(bookId);
 
-//            // Mock repository to return books matching the filter
-//            _bookRepositoryMock
-//                .Setup(repo => repo.GetBooksAsync("Fiction", null, 1, 10))
-//                .ReturnsAsync(books.FindAll(book => book.Genre == "Fiction"));
-
-//            // Act
-//            var result = await _bookService.GetBooksAsync(true, "Fiction", null, 1, 10);
-
-//            // Assert
-//            result.Should().NotBeNull();
-//            result.Count.Should().Be(1);
-//            result[0].Title.Should().Be("Book 1");
-
-//            // Ensure the repository was called with the filter
-//            _bookRepositoryMock.Verify(repo => repo.GetBooksAsync("Fiction", null, 1, 10), Times.Once);
-
-//            // Ensure cache was accessed
-//            _cacheMock.Verify(cache => cache.GetStringAsync("AllBooks", default), Times.Once);
-
-//            // Ensure cache was updated
-//            _cacheMock.Verify(cache => cache.SetStringAsync(
-//                "AllBooks", It.IsAny<string>(), It.IsAny<DistributedCacheEntryOptions>(), default), Times.Once);
-//        }
-//    }
-//}
+        // Assert
+        result.Should().BeTrue();
+    }
+}

@@ -19,11 +19,19 @@ using static FortunaeLibraryManagementSystem.AppSettings;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Amazon;
+using System.Net;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using HealthChecks.UI.Client;
 
 Env.Load();
 
 var builder = WebApplication.CreateBuilder(args);
+//var redisOptions = ConfigurationOptions.Parse(builder.Configuration.GetValue<string>("Redis:ConnectionString"));
+var redisConnectionString = builder.Configuration.GetSection("Redis:ConnectionString").Value;
+var multiplexer = ConnectionMultiplexer.Connect(redisConnectionString);
 
+builder.Services.AddSingleton<IConnectionMultiplexer>(multiplexer);
+builder.Services.AddScoped<IRedisService, RedisService>();
 
 
 var logger = LoggerFactory.Create(config =>
@@ -62,27 +70,18 @@ var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION")
 var redisConnection = Environment.GetEnvironmentVariable("REDIS_CONNECTION")
     ?? throw new Exception("REDIS_CONNECTION is missing!");
 
-//builder.Services.AddDbContext<LibraryDbContext>(options =>
-//    options.UseSqlServer(connectionString, sqlOptions =>
-//        sqlOptions.EnableRetryOnFailure()));
 
 builder.Services.AddDbContext<LibraryDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-var redisOptions = ConfigurationOptions.Parse(redisConnection);
-redisOptions.ConnectRetry = 5;
-redisOptions.ConnectTimeout = 5000;
-redisOptions.AbortOnConnectFail = false;
-redisOptions.SyncTimeout = 5000;
 
-builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
-    ConnectionMultiplexer.Connect(redisOptions));
 
 builder.Services.AddStackExchangeRedisCache(options =>
 {
-    options.Configuration = redisConnection;
-    options.InstanceName = "FortunaeCache:";
+    options.Configuration = builder.Configuration.GetValue<string>("Redis:ConnectionString");
+    options.InstanceName = builder.Configuration.GetValue<string>("Redis:InstanceName");
 });
+
 
 builder.Services.Configure<CookiePolicyOptions>(options =>
 {
@@ -105,7 +104,6 @@ builder.Services.AddAuthentication(options =>
         ValidateIssuer = true,
         ValidateAudience = true,
         ValidateLifetime = true,
-        //ValidateIssuerSigningKey = true,
         ValidIssuer = jwtIssuer,
         ValidAudience = jwtAudience,
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecretKey)),
@@ -164,7 +162,6 @@ builder.Services.Configure<JwtSettings>(options =>
     options.ExpirationTime = int.Parse(Environment.GetEnvironmentVariable("JWT_EXPIRATION") ?? "30");
 });
 
-builder.Services.AddScoped<IRedisService, RedisService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IBookRepository, BookRepository>();
@@ -173,7 +170,7 @@ builder.Services.AddScoped<IBorrowingService, BorrowingService>();
 builder.Services.AddScoped<IBorrowingRepository, BorrowingRepository>();
 builder.Services.AddScoped<IRatingRepository, RatingRepository>();
 builder.Services.AddScoped<IImageService, ImageService>();
-
+builder.Services.AddScoped<IRedisService, RedisService>();
 builder.Services.AddInMemoryRateLimiting();
 builder.Services.AddMemoryCache();
 builder.Services.Configure<IpRateLimitOptions>(builder.Configuration.GetSection("IpRateLimiting"));
@@ -222,24 +219,31 @@ builder.Services.AddControllers();
 builder.Services.AddHealthChecks();
 
 
-builder.WebHost.ConfigureKestrel(serverOptions =>
-{
-    serverOptions.Limits.MaxRequestHeadersTotalSize = 65536;
-    //var port = Environment.GetEnvironmentVariable("PORT") ?? "5000";
-    //serverOptions.ListenAnyIP(int.Parse(port), options =>
-    //{
-    //    options.Protocols = Microsoft.AspNetCore.Server.Kestrel.Core.HttpProtocols.Http1AndHttp2;
-    //});
-});
+//builder.WebHost.ConfigureKestrel(serverOptions =>
+//{
+//    serverOptions.Limits.MaxRequestHeadersTotalSize = 65536;
+//    var port = Environment.GetEnvironmentVariable("PORT") ?? "80";
+//    serverOptions.ListenAnyIP(int.Parse(port), options =>
+//    {
+//        options.Protocols = Microsoft.AspNetCore.Server.Kestrel.Core.HttpProtocols.Http1AndHttp2;
+//    });
+//});
 
 
 var app = builder.Build();
 
 app.UseForwardedHeaders();
 
-if (!app.Environment.IsDevelopment())
+
+if (app.Environment.IsDevelopment())
 {
     app.UseHttpsRedirection();
+    //app.UseHealthChecksUI();
+    //app.UseHealthChecks("/health", new HealthCheckOptions()
+    //{
+    //    Predicate = _ => true,
+    //    ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
+    //});
 }
 
 app.UseSwagger();
@@ -272,6 +276,13 @@ app.MapHealthChecks("/api/health", new HealthCheckOptions
         });
     }
 });
+//app.MapHealthChecks("/health/redis", new HealthCheckOptions
+//{
+//    Predicate = check => check.Tags.Contains("redis"),
+//    ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
+//});
+
+
 
 app.UseRouting();
 app.UseAuthentication();
