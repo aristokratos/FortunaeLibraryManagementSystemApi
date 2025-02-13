@@ -10,17 +10,19 @@ phases:
       - echo "Building .NET Web API"
       - dotnet restore
       - dotnet build --configuration Release
-      - dotnet publish -c Release -o ./publish --self-contained false
+      - dotnet publish -c Release -o ./publish --no-self-contained
 
   post_build:
     commands:
-      - echo "Verifying build output"
-      - ls -l ./publish
-      - ls -l ./publish/*.runtimeconfig.json
-      - echo "Zipping deployment package"
-      - cd publish && zip -r ../app.zip ./*
+      - echo "Checking publish directory contents"
+      - ls -la ./publish
+      - echo "Checking for runtimeconfig.json"
+      - find ./publish -name "*.runtimeconfig.json"
+      - cd publish
+      - zip -r ../app.zip .
       - cd ..
-      - echo "Uploading artifact to AWS S3"
+      - echo "Verifying zip contents"
+      - unzip -l app.zip | grep runtimeconfig.json
 
 artifacts:
   files:
