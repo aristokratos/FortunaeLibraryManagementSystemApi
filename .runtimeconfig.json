@@ -3,18 +3,10 @@
     "tfm": "net8.0",
     "framework": {
       "name": "Microsoft.NETCore.App",
-      "version": "8.0.*"
+      "version": "8.0.0"
     },
-    "rollForward": "LatestMinor"
-  }
-}
-
-{
-  "runtimeOptions": {
-    "tfm": "net8.0",
-    "framework": {
-      "name": "Microsoft.NETCore.App",
-      "version": "8.0.*"
+    "configProperties": {
+      "System.GC.Server": true
     }
   }
 }
