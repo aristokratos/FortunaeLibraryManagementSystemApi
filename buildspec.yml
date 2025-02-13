@@ -1,0 +1,22 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      dotnet: 8.0  # Adjust based on your .NET version
+  build:
+    commands:
+      - echo "Building .NET Web API"
+      - dotnet restore
+      - dotnet build --configuration Release
+      - dotnet publish -c Release -o ./publish
+  post_build:
+    commands:
+      - echo "Zipping deployment package"
+      - zip -r app.zip ./publish
+      - echo "Uploading artifact to AWS S3"
+artifacts:
+  files:
+    - app.zip
+  discard-paths: yes
+
