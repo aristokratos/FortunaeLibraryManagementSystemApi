@@ -5,21 +5,27 @@ phases:
     runtime-versions:
       dotnet: 8.0
 
+  pre_build:
+    commands:
+      - echo "Restoring dependencies..."
+      - dotnet restore
+
   build:
     commands:
-      - echo "Building .NET Web API"
-      - dotnet restore
+      - echo "Building .NET Core app..."
       - dotnet build --configuration Release
       - dotnet publish -c Release -o ./publish --no-self-contained
 
   post_build:
     commands:
-      - echo "Checking publish directory contents"
+      
+      - echo "Listing publish directory contents"
       - ls -la ./publish
-      - echo "Checking for runtimeconfig.json"
+      - echo "Looking for runtimeconfig.json"
       - find ./publish -name "*.runtimeconfig.json"
+
       - cd publish
-      - zip -r ../app.zip .
+      - zip -r ../app.zip *
       - cd ..
       - echo "Verifying zip contents"
       - unzip -l app.zip | grep runtimeconfig.json

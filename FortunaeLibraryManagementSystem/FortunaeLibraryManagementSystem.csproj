@@ -4,10 +4,15 @@
 		<TargetFramework>net8.0</TargetFramework>
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
-		<UserSecretsId>22815923-2d33-4702-bd6e-886ce13f8c57</UserSecretsId>
-		<DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
-		
+		<GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
+
+		<!-- These settings only apply during publish -->
 		<PublishReadyToRun>false</PublishReadyToRun>
+
+		<!-- Conditional properties based on configuration -->
+		<OutputType>Exe</OutputType>
+		<RuntimeIdentifier Condition="'$(Configuration)' == 'Release'">linux-x64</RuntimeIdentifier>
+		<SelfContained Condition="'$(Configuration)' == 'Release'">false</SelfContained>
 	</PropertyGroup>
 
   <ItemGroup>
