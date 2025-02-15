@@ -5,11 +5,7 @@
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
-
-		<!-- These settings only apply during publish -->
 		<PublishReadyToRun>false</PublishReadyToRun>
-
-		<!-- Conditional properties based on configuration -->
 		<OutputType>Exe</OutputType>
 		<RuntimeIdentifier Condition="'$(Configuration)' == 'Release'">linux-x64</RuntimeIdentifier>
 		<SelfContained Condition="'$(Configuration)' == 'Release'">false</SelfContained>
