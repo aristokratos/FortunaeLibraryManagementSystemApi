@@ -8,6 +8,7 @@
             public string? SecretAccessKey { get; set; }
             public string? S3BucketName { get; set; }
             public string? Region { get; set; }
+            public bool UseIAMRoles { get; set; }
         }
 
         public class CloudinarySettings

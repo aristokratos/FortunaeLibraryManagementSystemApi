@@ -105,9 +105,10 @@ namespace FortunaeLibraryManagementSystem.Service.Services
 
         private string GenerateJwtToken(string username, string role, string userId)
         {
-            var jwtKey = _configuration["JwtSettings:SecretKey"];
-            var jwtIssuer = _configuration["JwtSettings:Issuer"];
-            var jwtAudience = _configuration["JwtSettings:Audience"];
+            var jwtKey  = Environment.GetEnvironmentVariable("JWT_SECRET_KEY");
+            var jwtIssuer = Environment.GetEnvironmentVariable("JWT_ISSUER");
+            var jwtAudience = Environment.GetEnvironmentVariable("JWT_AUDIENCE");
+           
 
             var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
             var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);

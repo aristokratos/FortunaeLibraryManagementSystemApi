@@ -61,10 +61,11 @@ namespace FortunaeLibraryManagementSystem.Service.Services
         private readonly string _bucketName;
         private readonly ILogger<ImageService> _logger;
 
-        public ImageService(IAmazonS3 s3Client, IConfiguration configuration, ILogger<ImageService> logger)
+        public ImageService(IAmazonS3 s3Client, ILogger<ImageService> logger)
         {
             _s3Client = s3Client ?? throw new ArgumentNullException(nameof(s3Client));
-            _bucketName = configuration["AWS:S3BucketName"] ?? throw new ArgumentException("S3 bucket name not found in configuration");
+            _bucketName = Environment.GetEnvironmentVariable("AWS_S3_BUCKET")
+                          ?? throw new ArgumentException("S3 bucket name not found in environment variables");
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 

@@ -26,9 +26,16 @@ using HealthChecks.UI.Client;
 Env.Load();
 
 var builder = WebApplication.CreateBuilder(args);
-//var redisOptions = ConfigurationOptions.Parse(builder.Configuration.GetValue<string>("Redis:ConnectionString"));
-var redisConnectionString = builder.Configuration.GetSection("Redis:ConnectionString").Value;
-var multiplexer = ConnectionMultiplexer.Connect(redisConnectionString);
+builder.Configuration
+    .SetBasePath(Directory.GetCurrentDirectory())
+    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+    .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true)
+    .AddEnvironmentVariables()
+    .AddUserSecrets<Program>();
+
+var redisConnection = Environment.GetEnvironmentVariable("REDIS_CONNECTION")
+    ?? throw new InvalidOperationException("REDIS_CONNECTION is not configured");
+var multiplexer = ConnectionMultiplexer.Connect(redisConnection);
 
 builder.Services.AddSingleton<IConnectionMultiplexer>(multiplexer);
 builder.Services.AddScoped<IRedisService, RedisService>();
@@ -65,21 +72,20 @@ var jwtAudience = Environment.GetEnvironmentVariable("JWT_AUDIENCE")
     ?? throw new Exception("JWT_AUDIENCE is missing!");
 var jwtSecretKey = Environment.GetEnvironmentVariable("JWT_SECRET_KEY")
     ?? throw new Exception("JWT_SECRET_KEY is missing!");
+
+
+
+
 var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION")
-    ?? throw new Exception("DB_CONNECTION is missing!");
-var redisConnection = Environment.GetEnvironmentVariable("REDIS_CONNECTION")
-    ?? throw new Exception("REDIS_CONNECTION is missing!");
-
-
+    ?? throw new InvalidOperationException("DB_CONNECTION is not configured");
 builder.Services.AddDbContext<LibraryDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
-
+    options.UseSqlServer(connectionString));
 
 
 builder.Services.AddStackExchangeRedisCache(options =>
 {
-    options.Configuration = builder.Configuration.GetValue<string>("Redis:ConnectionString");
-    options.InstanceName = builder.Configuration.GetValue<string>("Redis:InstanceName");
+    options.Configuration = redisConnection;
+    //options.InstanceName = "FortunaLibrary_";
 });
 
 
@@ -128,16 +134,29 @@ builder.Services.AddAuthentication(options =>
         }
     };
 });
+var awsSettings = new AWSSettings
+{
+    AccessKeyId = Environment.GetEnvironmentVariable("AWS_ACCESS_KEY_ID")
+        ?? throw new InvalidOperationException("AWS_ACCESS_KEY_ID is not configured"),
+    SecretAccessKey = Environment.GetEnvironmentVariable("AWS_SECRET_ACCESS_KEY")
+        ?? throw new InvalidOperationException("AWS_SECRET_ACCESS_KEY is not configured"),
+    S3BucketName = Environment.GetEnvironmentVariable("AWS_S3_BUCKET")
+        ?? throw new InvalidOperationException("AWS_S3_BUCKET is not configured"),
+    Region = Environment.GetEnvironmentVariable("AWS_REGION")
+        ?? throw new InvalidOperationException("AWS_REGION is not configured")
+};
+
+builder.Services.AddSingleton(new AmazonS3Client(
+    awsSettings.AccessKeyId,
+    awsSettings.SecretAccessKey,
+    RegionEndpoint.GetBySystemName(awsSettings.Region)
+));
+
 builder.Configuration.SetBasePath(Directory.GetCurrentDirectory())
     .AddJsonFile("appsettings.json", optional: false);
 
 var awsConfig = builder.Configuration.GetSection("AWS").Get<AWSSettings>();
 
-builder.Services.AddSingleton(new AmazonS3Client(
-    awsConfig.AccessKeyId,
-    awsConfig.SecretAccessKey,
-    RegionEndpoint.GetBySystemName(awsConfig.Region)
-));
 builder.Services.Configure<AWSSettings>(options =>
 {
     options.AccessKeyId = Environment.GetEnvironmentVariable("AWS_ACCESS_KEY_ID");
@@ -146,12 +165,23 @@ builder.Services.Configure<AWSSettings>(options =>
     options.Region = Environment.GetEnvironmentVariable("AWS_REGION");
 });
 
-builder.Services.Configure<CloudinarySettings>(options =>
+var cloudinarySettings = new CloudinarySettings
 {
-    options.CloudName = Environment.GetEnvironmentVariable("CLOUDINARY_CLOUD_NAME");
-    options.ApiKey = Environment.GetEnvironmentVariable("CLOUDINARY_API_KEY");
-    options.ApiSecret = Environment.GetEnvironmentVariable("CLOUDINARY_API_SECRET");
-});
+    CloudName = Environment.GetEnvironmentVariable("CLOUDINARY_CLOUD_NAME")
+        ?? throw new InvalidOperationException("CLOUDINARY_CLOUD_NAME is not configured"),
+    ApiKey = Environment.GetEnvironmentVariable("CLOUDINARY_API_KEY")
+        ?? throw new InvalidOperationException("CLOUDINARY_API_KEY is not configured"),
+    ApiSecret = Environment.GetEnvironmentVariable("CLOUDINARY_API_SECRET")
+        ?? throw new InvalidOperationException("CLOUDINARY_API_SECRET is not configured")
+};
+
+builder.Services.AddSingleton(new Cloudinary(
+    new Account(
+        cloudinarySettings.CloudName,
+        cloudinarySettings.ApiKey,
+        cloudinarySettings.ApiSecret
+    )
+));
 
 
 builder.Services.Configure<JwtSettings>(options =>
@@ -161,7 +191,12 @@ builder.Services.Configure<JwtSettings>(options =>
     options.SecretKey = jwtSecretKey;
     options.ExpirationTime = int.Parse(Environment.GetEnvironmentVariable("JWT_EXPIRATION") ?? "30");
 });
-
+builder.Services.Configure<JwtSettings>(options =>
+    builder.Configuration.GetSection("JwtSettings").Bind(options));
+builder.Services.Configure<AWSSettings>(options =>
+    builder.Configuration.GetSection("AWS").Bind(options));
+builder.Services.Configure<CloudinarySettings>(options =>
+    builder.Configuration.GetSection("Cloudinary").Bind(options));
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IBookRepository, BookRepository>();
@@ -218,18 +253,6 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddControllers();
 builder.Services.AddHealthChecks();
 
-
-//builder.WebHost.ConfigureKestrel(serverOptions =>
-//{
-//    serverOptions.Limits.MaxRequestHeadersTotalSize = 65536;
-//    var port = Environment.GetEnvironmentVariable("PORT") ?? "80";
-//    serverOptions.ListenAnyIP(int.Parse(port), options =>
-//    {
-//        options.Protocols = Microsoft.AspNetCore.Server.Kestrel.Core.HttpProtocols.Http1AndHttp2;
-//    });
-//});
-
-
 var app = builder.Build();
 
 app.UseForwardedHeaders();
@@ -238,12 +261,6 @@ app.UseForwardedHeaders();
 if (app.Environment.IsDevelopment())
 {
     app.UseHttpsRedirection();
-    //app.UseHealthChecksUI();
-    //app.UseHealthChecks("/health", new HealthCheckOptions()
-    //{
-    //    Predicate = _ => true,
-    //    ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
-    //});
 }
 
 app.UseSwagger();
@@ -276,11 +293,7 @@ app.MapHealthChecks("/api/health", new HealthCheckOptions
         });
     }
 });
-//app.MapHealthChecks("/health/redis", new HealthCheckOptions
-//{
-//    Predicate = check => check.Tags.Contains("redis"),
-//    ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
-//});
+
 
 
 
@@ -289,8 +302,5 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-
-//string port = Environment.GetEnvironmentVariable("PORT") ?? "5000";
-//string ip = Environment.GetEnvironmentVariable("HOST") ?? "0.0.0.0";
 
 app.Run();
