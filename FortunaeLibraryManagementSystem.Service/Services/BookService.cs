@@ -234,7 +234,7 @@ namespace FortunaeLibraryManagementSystem.Service.Services
                 );
             }
 
-        }
+            }
 
         public async Task<PaginatedList<BookDTO>> GetAvailableBooksAsync(string? filter = null, int pageNumber = 1, int pageSize = 10)
         {
