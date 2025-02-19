@@ -10,6 +10,9 @@ namespace FortunaeLibraryManagementSystem.Service.Services
     using Microsoft.Extensions.Logging;
     using Microsoft.Extensions.Caching.Memory;
     using FortunaeLibraryManagementSystem.Service.Services.CacheService;
+    using Microsoft.EntityFrameworkCore;
+    using System.Diagnostics;
+    using static FortunaeLibraryManagementSystem.Service.DTOs.ResponseMessages;
 
     public class BookService : IBookService
     {
@@ -17,7 +20,6 @@ namespace FortunaeLibraryManagementSystem.Service.Services
         private readonly IRatingRepository _ratingRepository;
         private readonly ILogger<BookService> _logger;
         private readonly IImageService _imageService;
-        //private readonly IMemoryCache _memoryCache;
         private readonly IRedisService _cache;
         private const int CACHE_DURATION_MINUTES = 10;
 
@@ -31,19 +33,24 @@ namespace FortunaeLibraryManagementSystem.Service.Services
             _cache = cache;
         }
 
-        public async Task<BookDTO> AddBookAsync(CreateBookDTO createBookDto)
+        public async Task<ApiSuccessResponse<BookDTO>> AddBookAsync(CreateBookDTO createBookDto)
         {
+            var stopwatch = Stopwatch.StartNew();
             try
             {
                 if (createBookDto.Image == null)
                 {
-                    throw new ArgumentException("Image cannot be null.", nameof(createBookDto.Image));
+                    return new ApiSuccessResponse<BookDTO>
+                    {
+                        Status = 400,
+                        Message = "Image cannot be null.",
+                        Data = null,
+                        RuntimeSeconds = stopwatch.Elapsed.TotalSeconds,
+                        Timestamp = DateTime.UtcNow
+                    };
                 }
 
-                // Use ImageUrlResponseDto instead of string
                 ImageUrlResponseDto imageResponse = await _imageService.UploadImageAsync(createBookDto.Image);
-                string imageName = imageResponse.PresignedUrl;
-
                 var book = new Book
                 {
                     Id = Guid.NewGuid(),
@@ -53,105 +60,216 @@ namespace FortunaeLibraryManagementSystem.Service.Services
                     ISBN = createBookDto.ISBN,
                     Description = createBookDto.Description,
                     IsAvailable = true,
-                    BookImage = imageName
+                    BookImage = imageResponse.PresignedUrl
                 };
 
                 await _bookRepository.AddBookAsync(book);
+                stopwatch.Stop();
 
-                return MapToBookDTO(book);
+                return new ApiSuccessResponse<BookDTO>
+                {
+                    Status = 201,
+                    Message = "Book added successfully",
+                    Data = MapToBookDTO(book),
+                    RuntimeSeconds = stopwatch.Elapsed.TotalSeconds,
+                    Timestamp = DateTime.UtcNow
+                };
             }
             catch (Exception ex)
             {
                 _logger.LogError("An error occurred while adding the book: {Exception}", ex);
-                throw new Exception("An unexpected error occurred while adding the book.", ex);
+                return new ApiSuccessResponse<BookDTO>
+                {
+                    Status = 500,
+                    Message = "An unexpected error occurred while adding the book.",
+                    Data = null,
+                    RuntimeSeconds = stopwatch.Elapsed.TotalSeconds,
+                    Timestamp = DateTime.UtcNow
+                };
             }
         }
 
-        public async Task<BookDTO> UpdateBookAsync(Guid id, UpdateBookDTO updateBookDto)
-        {
-            var book = await _bookRepository.GetBookByIdAsync(id);
-            if (book == null)
-                throw new KeyNotFoundException("Book not found");
 
-            if (updateBookDto.Image != null)
+        public async Task<ResponseMessages.ApiSuccessResponse<BookDTO>> UpdateBookAsync(Guid id, UpdateBookDTO updateBookDto)
+        {
+            var stopwatch = Stopwatch.StartNew();
+            try
             {
-                // Use ImageUrlResponseDto instead of string
-                ImageUrlResponseDto imageResponse = await _imageService.UploadImageAsync(updateBookDto.Image);
-                book.BookImage = imageResponse.PresignedUrl;
+                var book = await _bookRepository.GetBookByIdAsync(id);
+                if (book == null)
+                {
+                    return new ResponseMessages.ApiSuccessResponse<BookDTO>
+                    {
+                        Status = 404,
+                        Message = "Book not found.",
+                        RuntimeSeconds = stopwatch.Elapsed.TotalSeconds
+                    };
+                }
+
+                if (updateBookDto.Image != null)
+                {
+                    ImageUrlResponseDto imageResponse = await _imageService.UploadImageAsync(updateBookDto.Image);
+                    book.BookImage = imageResponse.PresignedUrl;
+                }
+
+                book.Title = updateBookDto.Title ?? book.Title;
+                book.Author = updateBookDto.Author ?? book.Author;
+                book.Genre = updateBookDto.Genre ?? book.Genre;
+                book.Description = updateBookDto.Description ?? book.Description;
+                book.ISBN = updateBookDto.ISBN ?? book.ISBN;
+                book.IsAvailable = updateBookDto.IsAvailable ?? book.IsAvailable;
+
+                await _bookRepository.UpdateBookAsync(book);
+                stopwatch.Stop();
+
+                return ResponseMessages.ApiSuccessResponse<BookDTO>.Create(MapToBookDTO(book), stopwatch);
+            }
+            catch (Exception ex)
+            {
+                return new ResponseMessages.ApiSuccessResponse<BookDTO>
+                {
+                    Status = 500,
+                    Message = "An unexpected error occurred while updating the book.",
+                    RuntimeSeconds = stopwatch.Elapsed.TotalSeconds,
+                    Data = null,
+                    
+                };
+            }
+        }
+
+        public async Task<ResponseMessages.ApiSuccessResponse<BookDTO>> GetBooksByIdAsync(Guid bookId)
+        {
+            var stopwatch = Stopwatch.StartNew();
+            try
+            {
+                string cacheKey = $"Book_{bookId}";
+
+                var cachedBook = await _cache.GetAsync<BookDTO>(cacheKey);
+                if (cachedBook != null)
+                {
+                    stopwatch.Stop();
+                    return ResponseMessages.ApiSuccessResponse<BookDTO>.Create(
+                        cachedBook, stopwatch
+                    );
+                }
+
+                var book = await _bookRepository.GetBookByIdAsync(bookId);
+                if (book == null)
+                {
+                    stopwatch.Stop();
+                    return new ResponseMessages.ApiSuccessResponse<BookDTO>
+                    {
+                        Status = 404,
+                        Message = $"Book with ID {bookId} not found.",
+                        Data = null,
+                        RuntimeSeconds = stopwatch.Elapsed.TotalSeconds
+                    };
+                }
+
+                var bookDto = MapToBookDTO(book);
+                await _cache.SetAsync(cacheKey, bookDto, TimeSpan.FromMinutes(CACHE_DURATION_MINUTES));
+
+                stopwatch.Stop();
+                return ResponseMessages.ApiSuccessResponse<BookDTO>.Create(
+                    bookDto, stopwatch
+                );
+            }
+            catch (Exception ex)
+            {
+                stopwatch.Stop();
+                return new ResponseMessages.ApiSuccessResponse<BookDTO>
+                {
+                    Status = 500,
+                    Message = "An unexpected error occurred while retrieving the book.",
+                    Data = null,
+                    RuntimeSeconds = stopwatch.Elapsed.TotalSeconds
+                };
+            }
+        }
+
+
+        public async Task<ResponseMessages.ApiSuccessResponse<PaginatedList<BookDTO>>> GetAllBooksAsync(bool includeUnavailable = false, int pageNumber = 1, int pageSize = 10)
+        {
+            var stopwatch = Stopwatch.StartNew();
+            try
+            {
+                string cacheKey = $"AllBooks_Page{pageNumber}_Size{pageSize}_Include{includeUnavailable}";
+
+                var cachedBooks = await _cache.GetAsync<List<BookDTO>>(cacheKey);
+                if (cachedBooks != null)
+                {
+                    stopwatch.Stop();
+                    return ResponseMessages.ApiSuccessResponse<PaginatedList<BookDTO>>.Create(
+                        new PaginatedList<BookDTO>(
+                            includeUnavailable ? cachedBooks : cachedBooks.Where(b => b.IsAvailable).ToList(),
+                            pageNumber, pageSize, cachedBooks.Count
+                        ),
+                        stopwatch, pageNumber, pageSize, cachedBooks.Count
+                    );
+                }
+
+                IQueryable<Book> query = _bookRepository.GetBooksAsync(null, null);
+                if (!includeUnavailable)
+                {
+                    query = query.Where(b => b.IsAvailable);
+                }
+
+                var paginatedBooks = await PaginatedList<Book>.CreateAsync(query, pageNumber, pageSize);
+                var bookDtos = paginatedBooks.Select(MapToBookDTO).ToList();
+
+                await _cache.SetAsync(cacheKey, bookDtos, TimeSpan.FromMinutes(CACHE_DURATION_MINUTES));
+
+                stopwatch.Stop();
+                return ResponseMessages.ApiSuccessResponse<PaginatedList<BookDTO>>.Create(
+                    new PaginatedList<BookDTO>(bookDtos, pageNumber, pageSize, paginatedBooks.TotalCount),
+                    stopwatch, pageNumber, pageSize, paginatedBooks.TotalCount
+                );
+            }
+            catch (Exception ex)
+            {
+                stopwatch.Stop();
+                return ResponseMessages.ApiSuccessResponse<PaginatedList<BookDTO>>.Create(
+                    null, // No data since it's an error
+                    stopwatch, pageNumber, pageSize, 0 // No books available in case of an error
+                );
             }
 
-            book.Title = updateBookDto.Title ?? book.Title;
-            book.Author = updateBookDto.Author ?? book.Author;
-            book.Genre = updateBookDto.Genre ?? book.Genre;
-            book.Description = updateBookDto.Description ?? book.Description;
-            book.ISBN = updateBookDto.ISBN ?? book.ISBN;
-            book.IsAvailable = updateBookDto.IsAvailable ?? book.IsAvailable;
-
-            await _bookRepository.UpdateBookAsync(book);
-
-            return MapToBookDTO(book);
         }
 
-
-        public async Task<BookDTO> GetBooksByIdAsync(Guid bookId)
+        public async Task<PaginatedList<BookDTO>> GetAvailableBooksAsync(string? filter = null, int pageNumber = 1, int pageSize = 10)
         {
-            string cacheKey = $"Book_{bookId}";
-
-            var cachedBook = await _cache.GetAsync<BookDTO>(cacheKey);
-            if (cachedBook != null)
-                return cachedBook;
-
-            var book = await _bookRepository.GetBookByIdAsync(bookId);
-            if (book == null)
-                throw new KeyNotFoundException($"Book with ID {bookId} not found.");
-
-            var bookDto = MapToBookDTO(book);
-            await _cache.SetAsync(cacheKey, bookDto, TimeSpan.FromMinutes(CACHE_DURATION_MINUTES));
-
-            return bookDto;
-        }
-
-
-
-        public async Task<List<BookDTO>> GetAllBooksAsync(bool includeUnavailable = false)
-        {
-            string cacheKey = "AllBooks";
+            string cacheKey = $"AvailableBooks_Page{pageNumber}_Size{pageSize}_Filter{filter}";
 
             var cachedBooks = await _cache.GetAsync<List<BookDTO>>(cacheKey);
             if (cachedBooks != null)
-                return includeUnavailable ? cachedBooks : cachedBooks.Where(b => b.IsAvailable).ToList();
-
-            var booksList = await _bookRepository.GetBooksAsync(null, null, 1, 10);
-            var bookDtos = booksList.Select(MapToBookDTO).ToList();
-
-            await _cache.SetAsync(cacheKey, bookDtos, TimeSpan.FromMinutes(CACHE_DURATION_MINUTES));
-
-            return includeUnavailable ? bookDtos : bookDtos.Where(b => b.IsAvailable).ToList();
-        }
-
-        public async Task<List<BookDTO>> GetAvailableBooksAsync(string? filter = null)
-        {
-            string cacheKey = "AvailableBooks";
-
-            var cachedBooks = await _cache.GetAsync<List<BookDTO>>(cacheKey);
-            if (cachedBooks != null)
             {
-                return !string.IsNullOrWhiteSpace(filter)
-                    ? cachedBooks.Where(b => b.Title.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
-                                           b.Author.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
-                                           b.Genre.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList()
-                    : cachedBooks;
+                var filteredBooks = string.IsNullOrWhiteSpace(filter)
+                    ? cachedBooks
+                    : cachedBooks.Where(b =>
+                          b.Title.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                          b.Author.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                          b.Genre.Contains(filter, StringComparison.OrdinalIgnoreCase))
+                      .ToList();
+
+                return new PaginatedList<BookDTO>(filteredBooks, cachedBooks.Count, pageNumber, pageSize);
             }
 
-            var books = await _bookRepository.GetBooksAsync(null, null, 1, 10);
-            var bookDtos = books.Where(b => b.IsAvailable).Select(MapToBookDTO).ToList();
+            IQueryable<Book> query = _bookRepository.GetBooksAsync(null, null).Where(b => b.IsAvailable);
+
+            if (!string.IsNullOrWhiteSpace(filter))
+            {
+                query = query.Where(b => EF.Functions.Like(b.Title, $"%{filter}%") ||
+                                         EF.Functions.Like(b.Author, $"%{filter}%") ||
+                                         EF.Functions.Like(b.Genre, $"%{filter}%"));
+            }
+
+            var paginatedBooks = await PaginatedList<Book>.CreateAsync(query, pageNumber, pageSize);
+
+            var bookDtos = paginatedBooks.Select(MapToBookDTO).ToList();
 
             await _cache.SetAsync(cacheKey, bookDtos, TimeSpan.FromMinutes(CACHE_DURATION_MINUTES));
-            return !string.IsNullOrWhiteSpace(filter)
-                ? bookDtos.Where(b => b.Title.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
-                                    b.Author.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
-                                    b.Genre.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList()
-                : bookDtos;
+
+            return new PaginatedList<BookDTO>(bookDtos, paginatedBooks.TotalCount, pageNumber, pageSize);
         }
         public async Task AddRatingAsync(Guid bookId, Guid userId, int value, string? comment = null)
         {
@@ -185,11 +303,9 @@ namespace FortunaeLibraryManagementSystem.Service.Services
             await _bookRepository.UpdateBookAsync(book);
         }
 
-
-
         public async Task<List<BookDTO>> GetTopRatedBooksAsync(int top = 10)
         {
-            var books = await _bookRepository.GetBooksAsync(null, null, 1, 100);
+            var books =  _bookRepository.GetBooksAsync(null, null);
             return books
                 .OrderByDescending(b => b.AverageRating)
                 .Take(top)
@@ -210,23 +326,37 @@ namespace FortunaeLibraryManagementSystem.Service.Services
             return books;
         }
 
-        public async Task<List<BookDTO>> SearchBooksAsync(string? title = null, string? author = null, string? genre = null, bool? isAvailable = null)
+        public async Task<PaginatedList<BookDTO>> SearchBooksAsync(string? title = null, string? author = null, string? genre = null,bool? isAvailable = null, int pageNumber = 1, int pageSize = 10)
         {
-            var books = await _bookRepository.GetBooksAsync(null, null, 1, 100);
+            IQueryable<Book> query = _bookRepository.GetBooksAsync(null, null);
 
             if (!string.IsNullOrWhiteSpace(title))
-                books = books.Where(b => b.Title.Contains(title, StringComparison.OrdinalIgnoreCase)).ToList();
+            {
+                query = query.Where(b => EF.Functions.Like(b.Title, $"%{title}%"));
+            }
 
             if (!string.IsNullOrWhiteSpace(author))
-                books = books.Where(b => b.Author.Contains(author, StringComparison.OrdinalIgnoreCase)).ToList();
+            {
+                query = query.Where(b => EF.Functions.Like(b.Author, $"%{author}%"));
+            }
 
             if (!string.IsNullOrWhiteSpace(genre))
-                books = books.Where(b => b.Genre.Contains(genre, StringComparison.OrdinalIgnoreCase)).ToList();
+            {
+                query = query.Where(b => EF.Functions.Like(b.Genre, $"%{genre}%"));
+            }
 
             if (isAvailable.HasValue)
-                books = books.Where(b => b.IsAvailable == isAvailable.Value).ToList();
+            {
+                query = query.Where(b => b.IsAvailable == isAvailable.Value);
+            }
 
-            return books.Select(MapToBookDTO).ToList();
+            var paginatedBooks = await PaginatedList<Book>.CreateAsync(query, pageNumber, pageSize);
+
+            return new PaginatedList<BookDTO>(
+                paginatedBooks.Select(MapToBookDTO).ToList(),
+                paginatedBooks.TotalCount,
+                paginatedBooks.CurrentPage,
+                paginatedBooks.PageSize);
         }
 
         public async Task<List<BookDTO>> GetRelatedBooksAsync(Guid bookId)
@@ -235,7 +365,7 @@ namespace FortunaeLibraryManagementSystem.Service.Services
             if (book == null)
                 throw new KeyNotFoundException("Book not found.");
 
-            var relatedBooks = await _bookRepository.GetBooksAsync(book.Genre, book.Author, 1, 10);
+            var relatedBooks =  _bookRepository.GetBooksAsync(book.Genre, book.Author);
             return relatedBooks.Where(b => b.Id != bookId).Select(MapToBookDTO).ToList();
         }
         public async Task<List<RatingDTO>> GetRatingsByBookIdAsync(Guid bookId)
@@ -278,8 +408,6 @@ namespace FortunaeLibraryManagementSystem.Service.Services
             _logger.LogInformation($"Book with ID {bookId} deleted and cache invalidated.");
             return true;
         }
-
-
 
         private async Task InvalidateBookCaches(Guid bookId)
         {

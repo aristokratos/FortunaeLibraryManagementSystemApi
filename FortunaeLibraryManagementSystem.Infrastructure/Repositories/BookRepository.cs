@@ -15,16 +15,16 @@ namespace FortunaeLibraryManagementSystem.Infrastructure.Repositories
             _dbContext = dbContext;
         }
 
-        public async Task<List<Book>> GetBooksAsync(string? filter, string? sortBy, int page, int pageSize)
+        public  IQueryable<Book> GetBooksAsync(string? filter, string? sortBy)
         {
             IQueryable<Book> query = _dbContext.Books;
 
             if (!string.IsNullOrWhiteSpace(filter))
             {
-                query = query.Where(book =>
-                    book.Title.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
-                    book.Author.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
-                    book.Genre.Contains(filter, StringComparison.OrdinalIgnoreCase));
+                query =  query.Where(book =>
+                    book.Title.Contains(filter) ||
+                    book.Author.Contains(filter) ||
+                    book.Genre.Contains(filter));
             }
 
             if (!string.IsNullOrWhiteSpace(sortBy))
@@ -34,8 +34,8 @@ namespace FortunaeLibraryManagementSystem.Infrastructure.Repositories
                     "title" => query.OrderBy(book => book.Title),
                     "author" => query.OrderBy(book => book.Author),
                     "genre" => query.OrderBy(book => book.Genre),
-                    "rating" => query.OrderByDescending(book => book.AverageRating), 
-                    _ => query.OrderBy(book => book.Title) 
+                    "rating" => query.OrderByDescending(book => book.AverageRating),
+                    _ => query.OrderBy(book => book.Title)
                 };
             }
             else
@@ -43,12 +43,7 @@ namespace FortunaeLibraryManagementSystem.Infrastructure.Repositories
                 query = query.OrderBy(book => book.Title);
             }
 
-            if (page <= 0) page = 1;
-            if (pageSize <= 0) pageSize = 10;
-
-            query = query.Skip((page - 1) * pageSize).Take(pageSize);
-
-            return await query.ToListAsync();
+            return  query;
         }
 
 

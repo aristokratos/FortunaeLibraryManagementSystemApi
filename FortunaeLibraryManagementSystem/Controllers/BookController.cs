@@ -30,7 +30,7 @@ namespace FortunaeLibraryManagementSystem.Controllers
         public async Task<IActionResult> AddBook([FromForm] CreateBookDTO createBookDto)
         {
             var book = await _bookService.AddBookAsync(createBookDto);
-            return CreatedAtAction(nameof(GetAllBooksForAdmin), new { id = book.Id }, book);
+            return CreatedAtAction(nameof(GetAllBooksForAdmin), new { id = book }, book);
         }
 
         /// <summary>
@@ -83,11 +83,14 @@ namespace FortunaeLibraryManagementSystem.Controllers
         /// </summary>
         /// <param name="filter">Optional search filter.</param>
         /// <returns>A list of available books.</returns>
-        [HttpGet]
+        [HttpGet("getbooks")]
         [AllowAnonymous]
-        public async Task<IActionResult> GetAvailableBooks([FromQuery] string? filter)
+        public async Task<IActionResult> GetAvailableBooks(
+    [FromQuery] string? filter,
+    [FromQuery] int pageNumber = 1,
+    [FromQuery] int pageSize = 10)
         {
-            var books = await _bookService.GetAvailableBooksAsync(filter);
+            var books = await _bookService.GetAvailableBooksAsync(filter, pageNumber, pageSize);
             return Ok(books);
         }
 
@@ -105,12 +108,19 @@ namespace FortunaeLibraryManagementSystem.Controllers
            [FromQuery] string? title = null,
            [FromQuery] string? author = null,
            [FromQuery] string? genre = null,
-           [FromQuery] bool? isAvailable = null)
+           [FromQuery] bool? isAvailable = null,
+           [FromQuery] int pageNumber = 1, 
+           [FromQuery] int pageSize = 10)
         {
-            var books = await _bookService.SearchBooksAsync(title, author, genre, isAvailable);
+            if (pageNumber < 1 || pageSize < 1)
+            {
+                return BadRequest(new { Message = "Page number and page size must be greater than zero." });
+            }
+
+            var books = await _bookService.SearchBooksAsync(title, author, genre, isAvailable, pageNumber, pageSize);
             return Ok(books);
         }
-        
+
         /// <summary>
         /// Get a book by its ID.
         /// </summary>
@@ -122,7 +132,7 @@ namespace FortunaeLibraryManagementSystem.Controllers
         {
             if (bookId == Guid.Empty)
             {
-                return BadRequest(Message.InvalidBookId);
+                return BadRequest(new { Message = "Invalid book ID." });
             }
 
             try

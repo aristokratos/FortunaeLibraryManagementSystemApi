@@ -40,16 +40,17 @@ public class BookServiceTests
         );
     }
 
+    // ? Test: Add Book (Valid Input)
     [Fact]
-    public async Task AddBookAsync_ShouldAddBook_WhenValidInputProvided()
+    public async Task AddBookAsync_ShouldReturnSuccessResponse_WhenValidInputProvided()
     {
+        // Arrange
         var fileMock = new Mock<IFormFile>();
         var stream = new MemoryStream(new byte[0]);
         fileMock.Setup(f => f.OpenReadStream()).Returns(stream);
         fileMock.Setup(f => f.Length).Returns(0);
         fileMock.Setup(f => f.FileName).Returns("test.jpg");
 
-        // Arrange
         var createBookDto = new CreateBookDTO
         {
             Title = "Test Book",
@@ -58,12 +59,10 @@ public class BookServiceTests
             ISBN = "1234567890",
             Description = "A test book description",
             Image = fileMock.Object,
-
         };
 
         var imageResponse = new ImageUrlResponseDto { PresignedUrl = "http://image.url" };
         _imageServiceMock.Setup(x => x.UploadImageAsync(fileMock.Object)).ReturnsAsync(imageResponse);
-
         _bookRepositoryMock.Setup(x => x.AddBookAsync(It.IsAny<Book>())).Returns(Task.CompletedTask);
 
         // Act
@@ -71,10 +70,13 @@ public class BookServiceTests
 
         // Assert
         result.Should().NotBeNull();
-        result.Title.Should().Be(createBookDto.Title);
-        result.BookImage.Should().Be(imageResponse.PresignedUrl);
+        result.Status.Should().Be(200);
+        result.Data.Title.Should().Be(createBookDto.Title);
+        result.Data.BookImage.Should().Be(imageResponse.PresignedUrl);
+        result.RuntimeSeconds.Should().BeGreaterThanOrEqualTo(0);
     }
 
+    // ? Test: Get Book by ID (Book Exists)
     [Fact]
     public async Task GetBooksByIdAsync_ShouldReturnBook_WhenBookExists()
     {
@@ -94,13 +96,33 @@ public class BookServiceTests
         _bookRepositoryMock.Setup(x => x.GetBookByIdAsync(bookId)).ReturnsAsync(book);
 
         // Act
+        ResponseMessages.ApiSuccessResponse<BookDTO> result = await _bookService.GetBooksByIdAsync(bookId);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Status.Should().Be(200);
+        result.Data.Id.Should().Be(bookId);
+        result.RuntimeSeconds.Should().BeGreaterThanOrEqualTo(0);
+    }
+
+    // ? Test: Get Book by ID (Book Does Not Exist)
+    [Fact]
+    public async Task GetBooksByIdAsync_ShouldReturnError_WhenBookDoesNotExist()
+    {
+        // Arrange
+        var bookId = Guid.NewGuid();
+        _bookRepositoryMock.Setup(x => x.GetBookByIdAsync(bookId)).ReturnsAsync((Book)null);
+
+        // Act
         var result = await _bookService.GetBooksByIdAsync(bookId);
 
         // Assert
         result.Should().NotBeNull();
-        result.Id.Should().Be(bookId);
+        result.Status.Should().Be(404);
+        result.Message.Should().Be("Book not found.");
     }
 
+    // ? Test: Delete Book (Book Does Not Exist)
     [Fact]
     public async Task DeleteBookAsync_ShouldReturnFalse_WhenBookDoesNotExist()
     {
@@ -115,6 +137,7 @@ public class BookServiceTests
         result.Should().BeFalse();
     }
 
+    // ? Test: Delete Book (Book Exists)
     [Fact]
     public async Task DeleteBookAsync_ShouldReturnTrue_WhenBookExists()
     {
@@ -130,4 +153,52 @@ public class BookServiceTests
         // Assert
         result.Should().BeTrue();
     }
+
+    // ? Test: Get Paginated Books
+    [Fact]
+    public async Task GetAllBooksAsync_ShouldReturnPaginatedBooks()
+    {
+        // Arrange
+        var books = new List<Book>
+        {
+            new Book { Id = Guid.NewGuid(), Title = "Book 1" },
+            new Book { Id = Guid.NewGuid(), Title = "Book 2" }
+        };
+
+        _bookRepositoryMock.Setup(x => x.GetBooksAsync(null, null)).Returns(books.AsQueryable());
+
+        // Act
+        var result = await _bookService.GetAllBooksAsync();
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Status.Should().Be(200);
+        result.Data.Should().HaveCount(2);
+        result.Pagination.Should().NotBeNull();
+        result.Pagination.PageNumber.Should().Be(1);
+        result.Pagination.PageSize.Should().Be(10);
+        result.Pagination.TotalCount.Should().Be(2);
+    }
+
+    // ? Test: Search Books with Filter
+    [Fact]
+    public async Task SearchBooksAsync_ShouldReturnFilteredBooks()
+    {
+        // Arrange
+        var books = new List<Book>
+        {
+            new Book { Id = Guid.NewGuid(), Title = "C# Basics" },
+            new Book { Id = Guid.NewGuid(), Title = "ASP.NET Core" }
+        };
+
+        _bookRepositoryMock.Setup(x => x.GetBooksAsync(null, null)).Returns(books.AsQueryable());
+
+        // Act
+        var result = await _bookService.SearchBooksAsync(title: "C#");
+
+        // Assert
+        result.Should().NotBeNull();
+        result.First().Title.Should().Contain("C#");
+    }
 }
+
