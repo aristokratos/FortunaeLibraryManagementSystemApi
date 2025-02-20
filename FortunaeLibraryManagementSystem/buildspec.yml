@@ -7,20 +7,29 @@ phases:
 
   build:
     commands:
-      - echo "Building .NET Web API"
+      - echo "Restoring dependencies..."
       - dotnet restore
-      - dotnet build --configuration Release
-      - dotnet publish -c Release -o ./publish
+
+      - echo "Building .NET Web API..."
+      - dotnet build FortunaeLibraryManagementSystem/FortunaeLibraryManagementSystem.csproj --configuration Release
+
+      - echo "Running tests..."
+      - dotnet test --configuration Release --no-build
+
+      - echo "Publishing application..."
+      - dotnet publish FortunaeLibraryManagementSystem/FortunaeLibraryManagementSystem.csproj -c Release -o ./publish
 
   post_build:
     commands:
-      - echo "Verifying build output"
+      - echo "Verifying build output..."
       - ls -l ./publish
-      - echo "Zipping deployment package"
-      - zip -r app.zip ./publish
+
+      - echo "Zipping deployment package..."
+      - zip -r app.zip ./publish/*
+
       - echo "Uploading artifact to AWS S3"
 
 artifacts:
   files:
     - app.zip
-  discard-paths: yes
+  discard-paths: no
