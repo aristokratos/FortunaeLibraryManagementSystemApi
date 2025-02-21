@@ -72,20 +72,27 @@ namespace FortunaeLibraryManagementSystem.Controllers
         {
             try
             {
-                var userId = Guid.Parse(User.Identity.Name);
+               
+                var userIdClaim = User.Claims.FirstOrDefault(c =>
+                    c.Type == ClaimTypes.NameIdentifier ||
+                    c.Type == "sub" ||
+                    c.Type == "UserId" ||
+                    c.Type == "id")?.Value;
+
+                if (!Guid.TryParse(userIdClaim, out var userId))
+                {
+                    return BadRequest(new { message = "Invalid or missing user identifier." });
+                }
+
                 var history = await _borrowingService.GetMemberBorrowingHistoryAsync(userId);
                 return Ok(history);
             }
-            catch (FormatException ex)
-            {
-                // Handle invalid GUID format if needed
-                return BadRequest(new { message = "Invalid user identifier.", details = ex.Message });
-            }
             catch (Exception ex)
-            {
+            { 
                 return StatusCode(500, new { message = "An unexpected error occurred.", details = ex.Message });
             }
         }
+
 
         [HttpGet("active")]
         [Authorize(Roles = "Member")]

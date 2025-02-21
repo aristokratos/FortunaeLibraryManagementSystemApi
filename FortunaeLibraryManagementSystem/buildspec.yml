@@ -24,8 +24,13 @@ phases:
       - echo "Verifying build output..."
       - ls -l ./publish
 
+      - echo "Adding Procfile to publish directory..."
+      - echo "web: dotnet FortunaeLibraryManagementSystem.dll" > ./publish/Procfile
+
       - echo "Zipping deployment package..."
-      - zip -r app.zip ./publish/*
+      - cd publish
+      - zip -r ../app.zip .
+      - cd ..
 
       - echo "Uploading artifact to AWS S3"
 
