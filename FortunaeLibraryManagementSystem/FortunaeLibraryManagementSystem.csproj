@@ -9,6 +9,8 @@
 		<OutputType>Exe</OutputType>
 		<RuntimeIdentifier Condition="'$(Configuration)' == 'Release'">linux-x64</RuntimeIdentifier>
 		<SelfContained Condition="'$(Configuration)' == 'Release'">false</SelfContained>
+		<UserSecretsId>b59a2c7c-febc-462f-86f3-78686b911f7f</UserSecretsId>
+		<DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
 	</PropertyGroup>
 
   <ItemGroup>
