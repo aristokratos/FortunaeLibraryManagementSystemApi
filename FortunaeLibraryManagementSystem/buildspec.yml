@@ -11,13 +11,13 @@ phases:
       - dotnet restore
 
       - echo "Building .NET Web API..."
-      - dotnet build FortunaeLibraryManagementSystem/FortunaeLibraryManagementSystem.csproj --configuration Release
+      - dotnet build FortunaeLibraryManagementSystem/FortunaeLibraryManagementSystem.csproj --configuration Release --no-restore
 
       - echo "Running tests..."
-      - dotnet test --configuration Release --no-build
+      - dotnet test --configuration Release --no-build --verbosity normal
 
-      - echo "Publishing application..."
-      - dotnet publish FortunaeLibraryManagementSystem/FortunaeLibraryManagementSystem.csproj -c Release -o ./publish
+      - echo "Publishing application as self-contained..."
+      - dotnet publish FortunaeLibraryManagementSystem/FortunaeLibraryManagementSystem.csproj -c Release -r linux-x64 --self-contained true -p:PublishTrimmed=true -o ./publish
 
   post_build:
     commands:
@@ -25,16 +25,15 @@ phases:
       - ls -l ./publish
 
       - echo "Adding Procfile to publish directory..."
-      - echo "web: dotnet FortunaeLibraryManagementSystem.dll" > ./publish/Procfile
+      - echo "web: ./publish/FortunaeLibraryManagementSystem" > ./publish/Procfile
+      - ls -l ./publish
 
       - echo "Zipping deployment package..."
       - cd publish
       - zip -r ../app.zip .
       - cd ..
 
-      - echo "Uploading artifact to AWS S3"
-
 artifacts:
   files:
     - app.zip
-  discard-paths: no
+  discard-paths: yes
