@@ -2,6 +2,11 @@
 namespace FortunaeLibraryManagementSystem.Domain.Constants;
 public static class Message
 {
+    public const string cachekeyAllBooks = "AllBooks";
+    public const string cachekeyAvailableBooks = "AvailableBooks";
+    public const string cachekeyTopRatedBooks = "TopRatedBooks";
+
+
     public const string UserNotFound = "User not found"; 
     public const string UserNameAlreadyExists = "Username already exists";
     public const string UserDeleted = "User deleted successfully";
@@ -15,6 +20,8 @@ public static class Message
     public const string BookNotBorrowed = "Book not borrowed";
     public const string BookAlreadyReturned = "Book already returned";
     public const string BookDeleted = "Book deleted successfully";
+    public const string BookAdded = "Book added successfully";
+    public const string ImageCannotBeEmpty = "Image cannot be empty";
     public const string BorrowingNotFound = "Borrowing not found";
     public const string InvalidBookId = "Invalid book ID.";
     public const string BookDataCannotBeNull = "Book data cannot be null.";
@@ -48,4 +55,11 @@ public static class Message
     public const string BorrowLimimit = "Members can only borrow up to 3 books at a time.";
     public const string BorrowingRecordNotFound = "Borrowing record not found.";
     public const string EmailAlreadyExists = "Email already exists.";
+    public const string EmailNotFound = "Email not found.";
+    public const string ErrorAddingBook = "An unexpected error occurred while adding the book.";
+    public const string ErrorUpdatingBook = "An unexpected error occurred while updating the book.";
+    public const string ErrorAddingRating = "An unexpected error occurred while adding the rating.";
+    public const string ErrorAddingBorrowing = "An unexpected error occurred while adding the borrowing.";
+    public const string ErrorDeletingBook = "An unexpected error occurred while deleting the book.";
+    public const string ErrorRetrievingBook = "An unexpected error occurred while retrieving the book.";
 }
