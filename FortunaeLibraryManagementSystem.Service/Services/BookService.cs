@@ -13,6 +13,7 @@ namespace FortunaeLibraryManagementSystem.Service.Services
     using Microsoft.EntityFrameworkCore;
     using System.Diagnostics;
     using static FortunaeLibraryManagementSystem.Service.DTOs.ResponseMessages;
+    using FortunaeLibraryManagementSystem.Domain.Constants;
 
     public class BookService : IBookService
     {
@@ -28,7 +29,6 @@ namespace FortunaeLibraryManagementSystem.Service.Services
             _bookRepository = bookRepository;
             _logger = logger;
             _imageService = imageService;
-            //_memoryCache = memoryCache;
             _ratingRepository = ratingRepository;
             _cache = cache;
         }
@@ -43,7 +43,7 @@ namespace FortunaeLibraryManagementSystem.Service.Services
                     return new ApiSuccessResponse<BookDTO>
                     {
                         Status = 400,
-                        Message = "Image cannot be null.",
+                        Message = Message.ImageCannotBeEmpty,
                         Data = null,
                         RuntimeSeconds = stopwatch.Elapsed.TotalSeconds,
                         Timestamp = DateTime.UtcNow
@@ -69,7 +69,7 @@ namespace FortunaeLibraryManagementSystem.Service.Services
                 return new ApiSuccessResponse<BookDTO>
                 {
                     Status = 201,
-                    Message = "Book added successfully",
+                    Message = Message.BookAdded,
                     Data = MapToBookDTO(book),
                     RuntimeSeconds = stopwatch.Elapsed.TotalSeconds,
                     Timestamp = DateTime.UtcNow
@@ -81,7 +81,7 @@ namespace FortunaeLibraryManagementSystem.Service.Services
                 return new ApiSuccessResponse<BookDTO>
                 {
                     Status = 500,
-                    Message = "An unexpected error occurred while adding the book.",
+                    Message = Message.ErrorAddingBook,
                     Data = null,
                     RuntimeSeconds = stopwatch.Elapsed.TotalSeconds,
                     Timestamp = DateTime.UtcNow
@@ -129,7 +129,7 @@ namespace FortunaeLibraryManagementSystem.Service.Services
                 return new ResponseMessages.ApiSuccessResponse<BookDTO>
                 {
                     Status = 500,
-                    Message = "An unexpected error occurred while updating the book.",
+                    Message = Message.ErrorUpdatingBook,
                     RuntimeSeconds = stopwatch.Elapsed.TotalSeconds,
                     Data = null,
                     
@@ -180,7 +180,7 @@ namespace FortunaeLibraryManagementSystem.Service.Services
                 return new ResponseMessages.ApiSuccessResponse<BookDTO>
                 {
                     Status = 500,
-                    Message = "An unexpected error occurred while retrieving the book.",
+                    Message = Message.ErrorRetrievingBook,
                     Data = null,
                     RuntimeSeconds = stopwatch.Elapsed.TotalSeconds
                 };
@@ -229,8 +229,8 @@ namespace FortunaeLibraryManagementSystem.Service.Services
             {
                 stopwatch.Stop();
                 return ResponseMessages.ApiSuccessResponse<PaginatedList<BookDTO>>.Create(
-                    null, // No data since it's an error
-                    stopwatch, pageNumber, pageSize, 0 // No books available in case of an error
+                    null, 
+                    stopwatch, pageNumber, pageSize, 0 
                 );
             }
 
@@ -363,7 +363,7 @@ namespace FortunaeLibraryManagementSystem.Service.Services
         {
             var book = await _bookRepository.GetBookByIdAsync(bookId);
             if (book == null)
-                throw new KeyNotFoundException("Book not found.");
+                throw new KeyNotFoundException(Message.BookNotFound);
 
             var relatedBooks =  _bookRepository.GetBooksAsync(book.Genre, book.Author);
             return relatedBooks.Where(b => b.Id != bookId).Select(MapToBookDTO).ToList();
@@ -413,9 +413,9 @@ namespace FortunaeLibraryManagementSystem.Service.Services
         {
             var cacheKeys = new[]
             {
-                "AllBooks",
-                "AvailableBooks",
-                "TopRatedBooks",
+                Message.cachekeyAllBooks,
+                Message.cachekeyAvailableBooks,
+                Message.cachekeyAvailableBooks,
                 $"Book_{bookId}"
             };
 
@@ -430,12 +430,12 @@ namespace FortunaeLibraryManagementSystem.Service.Services
             {
                 Id = book.Id,
                 Title = book.Title,
-                Author = book.Author,
-                Genre = book.Genre,
-                Description = book.Description,
-                ISBN = book.ISBN,
+                Author = book.Author!,
+                Genre = book.Genre!,
+                Description = book.Description!,
+                ISBN = book.ISBN!,
                 IsAvailable = book.IsAvailable,
-                BookImage = book.BookImage,
+                BookImage = book.BookImage!,
                 AverageRating = book.AverageRating
             };
         }
