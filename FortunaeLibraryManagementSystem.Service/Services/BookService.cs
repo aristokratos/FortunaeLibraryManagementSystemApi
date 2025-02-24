@@ -14,6 +14,7 @@ namespace FortunaeLibraryManagementSystem.Service.Services
     using System.Diagnostics;
     using static FortunaeLibraryManagementSystem.Service.DTOs.ResponseMessages;
     using FortunaeLibraryManagementSystem.Domain.Constants;
+    using Amazon.S3.Model;
 
     public class BookService : IBookService
     {
@@ -64,6 +65,7 @@ namespace FortunaeLibraryManagementSystem.Service.Services
                 };
 
                 await _bookRepository.AddBookAsync(book);
+                await InvalidateBookCaches(book.Id);
                 stopwatch.Stop();
 
                 return new ApiSuccessResponse<BookDTO>
@@ -120,6 +122,7 @@ namespace FortunaeLibraryManagementSystem.Service.Services
                 book.IsAvailable = updateBookDto.IsAvailable ?? book.IsAvailable;
 
                 await _bookRepository.UpdateBookAsync(book);
+                await InvalidateBookCaches(book.Id);
                 stopwatch.Stop();
 
                 return ResponseMessages.ApiSuccessResponse<BookDTO>.Create(MapToBookDTO(book), stopwatch);
@@ -238,7 +241,8 @@ namespace FortunaeLibraryManagementSystem.Service.Services
 
         public async Task<PaginatedList<BookDTO>> GetAvailableBooksAsync(string? filter = null, int pageNumber = 1, int pageSize = 10)
         {
-            string cacheKey = $"AvailableBooks_Page{pageNumber}_Size{pageSize}_Filter{filter}";
+            string cacheVersion = await GetCacheVersionAsync();
+            string cacheKey = $"AvailableBooks_{cacheVersion}_Page{pageNumber}_Size{pageSize}_Filter{filter}";
 
             var cachedBooks = await _cache.GetAsync<List<BookDTO>>(cacheKey);
             if (cachedBooks != null)
@@ -314,6 +318,7 @@ namespace FortunaeLibraryManagementSystem.Service.Services
         }
         public async Task<List<BookDTO>> GetCachedTopRatedBooksAsync()
         {
+            string cacheVersion = await GetCacheVersionAsync();
             string cacheKey = "TopRatedBooks";
 
             var cachedBooks = await _cache.GetAsync<List<BookDTO>>(cacheKey);
@@ -411,19 +416,45 @@ namespace FortunaeLibraryManagementSystem.Service.Services
 
         private async Task InvalidateBookCaches(Guid bookId)
         {
-            var cacheKeys = new[]
+            string versionKey = "BookCacheVersion";
+            await _cache.SetAsync(versionKey, Guid.NewGuid().ToString(), TimeSpan.FromDays(1));
+
+            var keysToInvalidate = await _cache.GetKeysWithPrefixAsync("AvailableBooks_");
+
+            var cacheKeys = new HashSet<string>
             {
                 Message.cachekeyAllBooks,
                 Message.cachekeyAvailableBooks,
-                Message.cachekeyAvailableBooks,
                 $"Book_{bookId}"
             };
+
+            foreach (var key in keysToInvalidate)
+            {
+                cacheKeys.Add(key);
+            }
 
             foreach (var key in cacheKeys)
             {
                 await _cache.RemoveAsync(key);
             }
         }
+
+        private async Task<string> GetCacheVersionAsync()
+        {
+            string versionKey = "BookCacheVersion";
+            var version = await _cache.GetAsync<string>(versionKey);
+
+            if (version == null)
+            {
+                version = Guid.NewGuid().ToString();
+                await _cache.SetAsync(versionKey, version, TimeSpan.FromDays(1));
+            }
+
+            return version;
+        }
+
+
+
         private BookDTO MapToBookDTO(Book book)
         {
             return new BookDTO

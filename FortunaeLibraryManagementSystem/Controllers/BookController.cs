@@ -85,10 +85,7 @@ namespace FortunaeLibraryManagementSystem.Controllers
         /// <returns>A list of available books.</returns>
         [HttpGet("getbooks")]
         [AllowAnonymous]
-        public async Task<IActionResult> GetAvailableBooks(
-    [FromQuery] string? filter,
-    [FromQuery] int pageNumber = 1,
-    [FromQuery] int pageSize = 10)
+        public async Task<IActionResult> GetAvailableBooks([FromQuery] string? filter,[FromQuery] int pageNumber = 1,[FromQuery] int pageSize = 10)
         {
             var books = await _bookService.GetAvailableBooksAsync(filter, pageNumber, pageSize);
             return Ok(books);

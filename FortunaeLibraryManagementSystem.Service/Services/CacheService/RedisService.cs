@@ -38,4 +38,10 @@ public class RedisService : IRedisService
     {
         return await _db.KeyExistsAsync(key);
     }
+    public async Task<IEnumerable<string>> GetKeysWithPrefixAsync(string prefix)
+    {
+        var server = _redis.GetServer(_redis.GetEndPoints().First());
+        var keys = server.Keys(pattern: $"{prefix}*").Select(k => k.ToString());
+        return await Task.FromResult(keys);
+    }
 }

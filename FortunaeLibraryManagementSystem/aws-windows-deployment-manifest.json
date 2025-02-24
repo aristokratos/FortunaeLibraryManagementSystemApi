@@ -3,7 +3,7 @@
   "deployments": {
     "aspNetCoreWeb": [
       {
-        "name": "fortunav2",
+        "name": "fortunalib",
         "parameters": {
           "appBundle": ".",
           "iisPath": "/",
