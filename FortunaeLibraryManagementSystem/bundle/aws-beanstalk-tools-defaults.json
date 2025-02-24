@@ -1,11 +1,11 @@
 
 {
     "region" : "us-east-1",
-    "configuration" : "Debug",
+    "configuration" : "Release",
     "framework"     : "net8.0",
     "self-contained" : true,
-    "application"    : "fortunalib",
-    "environment"    : "fortuna-dev",
+    "application"    : "fortunav2",
+    "environment"    : "Fortunav2-dev",
     "enable-xray"    : false,
     "enhanced-health-type" : "enhanced",
     "additional-options"   : "",
